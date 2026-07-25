@@ -55,10 +55,38 @@ export type MarketAnalytics = {
   hoodieVolume: string;
   hoodieVolume24h: string;
   changePercent: number | null;
+  changePercent24h: number | null;
   holderCount: number;
   holders: MarketHolder[];
   daily: MarketDailyActivity[];
 };
+
+// Price change over the trailing 24h window: latest trade price versus the
+// last trade at or before the window start (a market with no trades inside
+// the window reads 0% — its price has not moved).
+export function change24hFromPoints(
+  points: MarketSwapPoint[],
+  cutoff: number,
+) {
+  if (points.length === 0) return null;
+  const latest = points.at(-1)?.price;
+  let baseline: number | undefined;
+  for (const point of points) {
+    if (point.timestamp <= cutoff) baseline = point.price;
+    else break;
+  }
+  const reference = baseline ?? points[0]?.price;
+  if (
+    latest === undefined ||
+    reference === undefined ||
+    !Number.isFinite(latest) ||
+    !Number.isFinite(reference) ||
+    reference <= 0
+  ) {
+    return null;
+  }
+  return (latest / reference - 1) * 100;
+}
 
 export type HoodiePadLaunch = HoodiePadMarket & {
   creator: Address;
@@ -81,6 +109,18 @@ export type HoodiePadMarketSummary = {
   active: boolean;
   launchBlock: string;
   tone: "green" | "peach" | "blue" | "violet";
+  // Numeric fields (HOODIE-denominated where applicable) for USD conversion,
+  // sorting, and the explore table.
+  priceHoodie: number | null;
+  fdvHoodieNumber: number | null;
+  volumeHoodieNumber: number;
+  volume24hHoodieNumber: number;
+  txns: number;
+  txns24h: number;
+  changePercent: number | null;
+  changePercent24h: number | null;
+  holderCount: number;
+  launchTimestamp: number;
 };
 
 type DecodedChainEvent = {
@@ -379,6 +419,7 @@ export async function readMarketAnalytics(
     hoodieVolume: compactAmount(hoodieVolumeRaw),
     hoodieVolume24h: compactAmount(hoodieVolume24hRaw),
     changePercent,
+    changePercent24h: change24hFromPoints(points, cutoff24h),
     holderCount: holderData.holderCount,
     holders: holderData.holders,
     daily: [...dailyActivity.entries()]
@@ -483,18 +524,38 @@ export function summarizeHoodiePadLaunches(
   launches: HoodiePadLaunch[],
 ): HoodiePadMarketSummary[] {
   const tones: HoodiePadMarketSummary["tone"][] = ["green", "peach", "blue", "violet"];
-  return launches.map((market, index) => ({
-    address: market.address,
-    symbol: market.symbol,
-    name: market.name,
-    creator: market.creator,
-    price: market.hoodiePerToken,
-    fdv: `${market.fdvHoodie} HOODIE`,
-    volume: `${market.analytics.hoodieVolume} HOODIE`,
-    change: formatMarketChange(market.analytics.changePercent),
-    imageUrl: market.imageUrl,
-    active: market.hasSwapActivity,
-    launchBlock: market.launchBlock,
-    tone: tones[index % tones.length],
-  }));
+  return launches.map((market, index) => {
+    const priceHoodie = market.hoodiePerToken === "Unavailable"
+      ? null
+      : Number(market.hoodiePerToken.replaceAll(",", ""));
+    const supply = Number(market.totalSupplyRaw) / 1e18;
+    const fdvHoodieNumber =
+      priceHoodie !== null && Number.isFinite(priceHoodie) && Number.isFinite(supply)
+        ? priceHoodie * supply
+        : null;
+    return {
+      address: market.address,
+      symbol: market.symbol,
+      name: market.name,
+      creator: market.creator,
+      price: market.hoodiePerToken,
+      fdv: `${market.fdvHoodie} HOODIE`,
+      volume: `${market.analytics.hoodieVolume} HOODIE`,
+      change: formatMarketChange(market.analytics.changePercent),
+      imageUrl: market.imageUrl,
+      active: market.hasSwapActivity,
+      launchBlock: market.launchBlock,
+      tone: tones[index % tones.length],
+      priceHoodie: priceHoodie !== null && Number.isFinite(priceHoodie) ? priceHoodie : null,
+      fdvHoodieNumber,
+      volumeHoodieNumber: Number(market.analytics.hoodieVolumeRaw) / 1e18,
+      volume24hHoodieNumber: Number(market.analytics.hoodieVolume24hRaw) / 1e18,
+      txns: market.analytics.swapCount,
+      txns24h: market.analytics.swapCount24h,
+      changePercent: market.analytics.changePercent,
+      changePercent24h: market.analytics.changePercent24h,
+      holderCount: market.analytics.holderCount,
+      launchTimestamp: market.launchTimestamp,
+    };
+  });
 }

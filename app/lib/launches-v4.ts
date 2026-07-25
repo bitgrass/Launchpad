@@ -10,11 +10,12 @@ import {
   type Hex,
 } from "viem";
 import product from "../../config/hoodiepad-v2.json";
-import type {
-  HoodiePadLaunch,
-  MarketAnalytics,
-  MarketHolder,
-  MarketSwapPoint,
+import {
+  change24hFromPoints,
+  type HoodiePadLaunch,
+  type MarketAnalytics,
+  type MarketHolder,
+  type MarketSwapPoint,
 } from "./launches";
 import {
   readHoodiePadV4Market,
@@ -487,6 +488,7 @@ export async function readV4MarketAnalytics(
     hoodieVolume: compactAmount(hoodieVolumeRaw),
     hoodieVolume24h: compactAmount(hoodieVolume24hRaw),
     changePercent,
+    changePercent24h: change24hFromPoints(points, cutoff24h),
     holderCount: holderData.holderCount,
     holders: holderData.holders,
     daily: [...dailyActivity.entries()]

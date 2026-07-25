@@ -14,6 +14,9 @@ type ChartPoint = {
 type ChartData = {
   currentPrice: string;
   fdvHoodie: string;
+  priceUsd: number | null;
+  fdvUsd: number | null;
+  volumeUsd: number | null;
   points: ChartPoint[];
   swapCount: number;
   hoodieVolume: string;
@@ -21,6 +24,16 @@ type ChartData = {
   latestBlock: string | null;
   holderCount: number;
 };
+
+function usd(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  if (value === 0) return "$0";
+  if (value < 0.01) return "<$0.01";
+  return `$${new Intl.NumberFormat("en-US", {
+    notation: value >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: 2,
+  }).format(value)}`;
+}
 
 function chartPath(points: ChartPoint[]) {
   if (points.length === 0) return "";
@@ -111,7 +124,15 @@ export function MarketChart({
       )}
       <div className="chart-metrics">
         <div><span>All-time swaps</span><strong>{data?.swapCount ?? "—"}</strong></div>
-        <div><span>All-time volume</span><strong>{data ? `${data.hoodieVolume} HOODIE` : "—"}</strong></div>
+        <div>
+          <span>All-time volume</span>
+          <strong>
+            {data
+              ? usd(data.volumeUsd) ?? `${data.hoodieVolume} HOODIE`
+              : "—"}
+          </strong>
+          {data && usd(data.volumeUsd) && <small>{data.hoodieVolume} HOODIE</small>}
+        </div>
         <div>
           <span>All-time change</span>
           <strong className={change !== null && change !== undefined && change < 0 ? "negative" : ""}>
@@ -120,7 +141,15 @@ export function MarketChart({
               : `${change > 0 ? "+" : ""}${change.toFixed(2)}%`}
           </strong>
         </div>
-        <div><span>Market cap (FDV)</span><strong>{data ? `${data.fdvHoodie} HOODIE` : "—"}</strong></div>
+        <div>
+          <span>Market cap (FDV)</span>
+          <strong>
+            {data
+              ? usd(data.fdvUsd) ?? `${data.fdvHoodie} HOODIE`
+              : "—"}
+          </strong>
+          {data && usd(data.fdvUsd) && <small>{data.fdvHoodie} HOODIE</small>}
+        </div>
         <div><span>Wallet holders</span><strong>{data?.holderCount ?? "—"}</strong></div>
       </div>
     </div>

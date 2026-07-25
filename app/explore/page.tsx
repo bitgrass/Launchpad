@@ -1,5 +1,6 @@
 import { AppShell } from "../components/AppShell";
 import { ExploreMarkets } from "../components/ExploreMarkets";
+import { readDisplayPrices } from "../lib/display-prices";
 import {
   readHoodiePadLaunches,
   summarizeHoodiePadLaunches,
@@ -19,7 +20,10 @@ async function readRegistry() {
 }
 
 export default async function ExplorePage() {
-  const { launches, registryError } = await readRegistry();
+  const [{ launches, registryError }, prices] = await Promise.all([
+    readRegistry(),
+    readDisplayPrices().catch(() => ({ ethUsd: null, hoodieUsd: null })),
+  ]);
   const markets = summarizeHoodiePadLaunches(launches);
 
   return (
@@ -37,7 +41,7 @@ export default async function ExplorePage() {
           </div>
         </section>
       ) : (
-        <ExploreMarkets markets={markets} />
+        <ExploreMarkets markets={markets} hoodieUsd={prices.hoodieUsd} />
       )}
     </AppShell>
   );
