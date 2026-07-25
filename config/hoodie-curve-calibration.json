@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "status": "passed",
+  "chainId": 4663,
+  "forkBlock": "17251944",
+  "referenceTick": 200879,
+  "startTick": -24200,
+  "endTick": 25800,
+  "configHash": "0x4ac3026c7ff6ced11c969437e1b084685235119a92582474bb514ceae620133a",
+  "completedAt": "2026-07-23T11:29:51.604Z",
+  "checks": [
+    {
+      "name": "launch-created",
+      "passed": true,
+      "details": "token 0x958980170E306Df9e67a6B42820795f408EB7d77; pool 0x9Ff8E6037b9984f2d2f97091ED92f07f3d84ECB0"
+    },
+    {
+      "name": "token-ordering",
+      "passed": true,
+      "details": "0x958980170E306Df9e67a6B42820795f408EB7d77 / 0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3"
+    },
+    {
+      "name": "pool-locked",
+      "passed": true,
+      "details": "status 2; ticks -24200 to 25800"
+    },
+    {
+      "name": "token-policy",
+      "passed": true,
+      "details": "maxBalance 20000000000000000000000000 expected 20000000000000000000000000; balanceLimitEnd 1784892544 expected 1784892544; active true; controller 0x0000000000000000000000000000000000000000 expected 0x0000000000000000000000000000000000000000; NoOp migration pool 0xdeaDDeADDEaDdeaDdEAddEADDEAdDeadDEADDEaD expected 0xdeaDDeADDEaDdeaDdEAddEADDEAdDeadDEADDEaD; pool lock active true; canonical V3 pool excluded true; NoOp governance excluded true"
+    },
+    {
+      "name": "buy",
+      "passed": true,
+      "details": "10000000000000000000000000 wei received"
+    },
+    {
+      "name": "max-wallet-enforced",
+      "passed": true,
+      "details": "balance remained 10000000000000000000000000"
+    },
+    {
+      "name": "max-wallet-expired",
+      "passed": true,
+      "details": "balance 21000000000000000000000000"
+    },
+    {
+      "name": "sell",
+      "passed": true,
+      "details": "balance 20000000000000000000000000"
+    },
+    {
+      "name": "fee-claim",
+      "passed": true,
+      "details": "HOODIE 36320020780219833042135; token 9999999999999999999999"
+    },
+    {
+      "name": "fee-split-80-15-5",
+      "passed": true,
+      "details": "HOODIE 29056016624175866433709/5448003117032974956320/1816001039010991652106; token 8000000000000000000001/1499999999999999999999/499999999999999999999"
+    },
+    {
+      "name": "noop-migration-locked",
+      "passed": true
+    }
+  ]
+}

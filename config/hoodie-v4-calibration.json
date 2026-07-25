@@ -1,0 +1,207 @@
+{
+  "version": 2,
+  "marketVersion": "doppler-multicurve-v4-v2",
+  "status": "passed",
+  "chainId": 4663,
+  "forkBlock": "18519197",
+  "configHash": "0x32fa9ff00851988964470725796bca48a2fd5e725c08995ae4424ab1dd1980c7",
+  "curveVersion": 1,
+  "completedAt": "2026-07-24T22:48:21.756Z",
+  "checks": [
+    {
+      "name": "runtime-hashes",
+      "passed": true,
+      "details": "approved at block 18220176"
+    },
+    {
+      "name": "module-whitelisting",
+      "passed": true,
+      "details": "1,3,2,4"
+    },
+    {
+      "name": "hoodie-reference-pool-key",
+      "passed": true,
+      "details": "{\"currency0\":\"0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73\",\"currency1\":\"0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3\",\"fee\":8388608,\"tickSpacing\":200,\"hooks\":\"0x4e3468951D49f2EEa976eD0D6e75fFCb44a9a544\"}"
+    },
+    {
+      "name": "hoodie-reference-pool-id",
+      "passed": true,
+      "details": "0x590eb1069a71fe72e3470f094c324513da3691987868a2b355fd8f29713d889b"
+    },
+    {
+      "name": "eth-usd-fresh",
+      "passed": true,
+      "details": "1858.87 at 2026-07-24T22:47:02.706Z"
+    },
+    {
+      "name": "hoodie-usd-derived",
+      "passed": true,
+      "details": "0.000003519767081292 USD; 528123014.127834195776870356 HOODIE/WETH"
+    },
+    {
+      "name": "launch-created",
+      "passed": true,
+      "details": "token 0x73e7ab89812d615281b5F97c7F43CCeCEa2be3A8; PoolId 0x67b56cfa6cfb4dd4ea5db8f78bfbda0444eee91c8815ee31c1636176bfd432b3"
+    },
+    {
+      "name": "opening-fdv-target",
+      "passed": true,
+      "details": "$30000"
+    },
+    {
+      "name": "opening-fdv-within-tolerance",
+      "passed": true,
+      "details": "$30517.089083"
+    },
+    {
+      "name": "total-supply-exact",
+      "passed": true,
+      "details": "1000000000000000000000000000"
+    },
+    {
+      "name": "market-allocation-exact",
+      "passed": true,
+      "details": "1000000000000000000000000000"
+    },
+    {
+      "name": "no-vesting",
+      "passed": true,
+      "details": "schedules 0; vested 0"
+    },
+    {
+      "name": "zero-creator-liquid-allocation",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "name": "no-material-dead-inventory",
+      "passed": true,
+      "details": "44"
+    },
+    {
+      "name": "pool-locked",
+      "passed": true,
+      "details": "pool 2; hook 2; token true"
+    },
+    {
+      "name": "noop-migration",
+      "passed": true,
+      "details": "0xba2F330EDb16cD8056f5988d8CE19BbC63475A0e"
+    },
+    {
+      "name": "noop-governance",
+      "passed": true,
+      "details": "0x85f37f74Ef2478A770318bc810177a9835911aD7"
+    },
+    {
+      "name": "token-policy",
+      "passed": true,
+      "details": "max 20000000000000000000000000; end 1785019621; controller 0x0000000000000000000000000000000000000000"
+    },
+    {
+      "name": "v4-active-lp-fee-one-percent",
+      "passed": true,
+      "details": "10000"
+    },
+    {
+      "name": "rehype-hook-fee-zero",
+      "passed": true,
+      "details": "fees 0/0/0; mode 1"
+    },
+    {
+      "name": "permit2-approval",
+      "passed": true,
+      "details": "ERC20 115792089237316195423570985008687907853269984665640564039457584007913129639935; Permit2 1461501637330902918203684832716283019655932542975; expiry 1785538021; balance 852776169033162245918656572"
+    },
+    {
+      "name": "uniswap-v4-router-control",
+      "passed": true,
+      "details": "known-live HOODIE/WETH exact-input simulation returned 1868404339473267 WETH"
+    },
+    {
+      "name": "direct-hoodie-buy",
+      "passed": true,
+      "details": "10000000000000000000000000 received from exact-input swap"
+    },
+    {
+      "name": "max-wallet-enforced",
+      "passed": true,
+      "details": "second exact-input buy rejected above the 2% balance limit"
+    },
+    {
+      "name": "max-wallet-expired",
+      "passed": true,
+      "details": "21000000000000000000000000"
+    },
+    {
+      "name": "direct-hoodie-sell",
+      "passed": true,
+      "details": "1000000000000000000000000 sold"
+    },
+    {
+      "name": "quote-minout-enforced",
+      "passed": true,
+      "details": "impossible minimum output reverted"
+    },
+    {
+      "name": "expired-quote-rejected",
+      "passed": true,
+      "details": "deadline 1 reverted"
+    },
+    {
+      "name": "eth-multihop-buy",
+      "passed": true,
+      "details": "39558524871571110513512 child tokens received"
+    },
+    {
+      "name": "eth-multihop-sell",
+      "passed": true,
+      "details": "19779262435785555256756 child tokens sold to ETH"
+    },
+    {
+      "name": "v4-swap-indexing",
+      "passed": true,
+      "details": "5 confirmed child-pool Swap events"
+    },
+    {
+      "name": "creator-pending-fees",
+      "passed": true,
+      "details": "collectFees preview 10197792624357855552567/2373368431170432622054630"
+    },
+    {
+      "name": "creator-fee-claim",
+      "passed": true,
+      "details": "8158234099486284442053/1898694744936346097643704"
+    },
+    {
+      "name": "ecosystem-fee-claim",
+      "passed": true,
+      "details": "1529668893653678332885/356005264675564893308194"
+    },
+    {
+      "name": "protocol-fee-claim",
+      "passed": true,
+      "details": "509889631217892777628/118668421558521631102731"
+    },
+    {
+      "name": "fee-split-80-15-5",
+      "passed": true,
+      "details": "token 8158234099486284442053/1529668893653678332885/509889631217892777628; HOODIE 1898694744936346097643704/356005264675564893308194/118668421558521631102731"
+    },
+    {
+      "name": "price-orientation-token0",
+      "passed": true,
+      "details": "1"
+    },
+    {
+      "name": "price-orientation-token1",
+      "passed": true,
+      "details": "1"
+    },
+    {
+      "name": "legacy-v3-regression",
+      "passed": true,
+      "details": "0x650716844ed8d82B1835C854fD56Fc9ADE772b42 remains readable through V3 initializer"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "name": "hoodiepad",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vinext dev",
+    "build": "vinext build",
+    "start": "vinext start",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs && tsx --test tests/protocol.test.ts tests/market.test.ts tests/launches.test.ts tests/v4-policy.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "verify:railway": "npm run build && tsx scripts/verify-railway-runtime.ts",
+    "db:generate": "drizzle-kit generate",
+    "verify:robinhood": "tsx --env-file=.env.local scripts/verify-robinhood.ts",
+    "calibrate:robinhood": "tsx --env-file=.env.local scripts/calibrate-robinhood.ts",
+    "verify:release": "tsx --env-file=.env.local scripts/verify-release.ts",
+    "calibrate:robinhood:v4": "tsx --env-file=.env.local scripts/calibrate-robinhood-v4.ts",
+    "verify:robinhood:v4": "tsx --env-file=.env.local scripts/verify-robinhood-v4.ts",
+    "report:robinhood:v4-runtime": "tsx --env-file=.env.local scripts/report-robinhood-v4-runtime.ts",
+    "approve:robinhood:v4-runtime": "tsx scripts/approve-robinhood-v4-runtime.ts"
+  },
+  "dependencies": {
+    "@whetstone-research/doppler-sdk": "1.0.32",
+    "drizzle-orm": "0.45.2",
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "viem": "2.38.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/workers-types": "5.20260723.1",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.26",
+    "drizzle-kit": "0.31.10",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.6",
+    "react-server-dom-webpack": "19.2.6",
+    "tailwindcss": "4.2.1",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vinext": "0.0.50",
+    "vite": "8.0.13",
+    "wrangler": "4.92.0"
+  },
+  "type": "module",
+  "optionalDependencies": {
+    "@foundry-rs/anvil-win32-amd64": "1.7.1"
+  }
+}
