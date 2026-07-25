@@ -77,6 +77,11 @@ new ADR and fresh Robinhood fork tests.
 | Migration / governance | NoOp / NoOp; locked market |
 | New-launch dependency | Exact Doppler SDK `1.0.32` |
 | Public discovery | V4-only after V2 activation |
+| Rehype `startingTime` validation | Configured `0` accepts the hook-stamped pool-initialization timestamp (any non-future value); non-zero requires exact match (ADR 0013) |
+| In-app trading | Canonical V4Quoter quotes, Permit2 exact-amount approvals, direct Universal Router 2.1.1 `V4_SWAP`; enabled only while the approved fork-calibration report matches the build (ADR 0013) |
+| In-app trade currencies | HOODIE direct, plus ETH via the calibrated HOODIE/WETH reference-pool multihop (ADR 0013) |
+| Market chart / activity | Canonical V4 PoolManager `Swap` events, swapper-perspective sign convention, incremental scans anchored at each launch block (ADR 0013) |
+| Uniswap interface link | Informational only; the interface does not route Robinhood's Doppler-hooked pools (no hook allowlist entry for chain 4663) |
 
 The V2 runtime-hash snapshot and calibration file deliberately start
 unapproved. Values are filled only from an explicitly reviewed current

@@ -11,6 +11,7 @@ import {
   formatUnits,
   getAddress,
   maxUint256,
+  numberToHex,
   parseAbi,
   parseAbiParameters,
   parseUnits,
@@ -28,6 +29,7 @@ import {
   createRobinhoodPublicClient,
   ROBINHOOD_CHAIN_ID,
 } from "./protocol";
+import { getHoodieReferencePoolKey } from "./v4-policy";
 
 const erc20Abi = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",
@@ -92,6 +94,7 @@ const UNIVERSAL_ROUTER_MSG_SENDER =
 const V4_OPEN_DELTA = 0n;
 
 export type SwapSide = "buy" | "sell";
+export type SwapCurrency = "hoodie" | "eth";
 
 export type PreparedWalletTransaction = {
   kind: "token-approval" | "permit2-approval" | "swap";
@@ -427,12 +430,48 @@ export function encodeV4ChildToEthSwap(input: {
   });
 }
 
+function isNotEnoughLiquidityRevert(error: unknown) {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && current; depth += 1) {
+    if (current instanceof Error) {
+      const record = current as Error & {
+        cause?: unknown;
+        shortMessage?: unknown;
+        details?: unknown;
+        raw?: unknown;
+        data?: unknown;
+        signature?: unknown;
+      };
+      for (const value of [
+        record.message,
+        record.shortMessage,
+        record.details,
+        record.raw,
+        record.data,
+        record.signature,
+      ]) {
+        if (typeof value === "string") parts.push(value);
+      }
+      current = record.cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+  const text = parts.join(" ").toLowerCase();
+  // V4Quoter NotEnoughLiquidity(bytes32) selector 0x7a5ed734, usually carried
+  // inside the quoter's UnexpectedRevertBytes envelope's raw bytes.
+  return text.includes("7a5ed734") || text.includes("notenoughliquidity");
+}
+
 async function prepareV4Swap(input: {
   market: HoodiePadV4Market;
   account: Address;
   side: SwapSide;
   amount: string;
   slippageBps: number;
+  currency: SwapCurrency;
 }): Promise<PreparedSwap> {
   const { market, account } = input;
   if (!market.official) {
@@ -443,10 +482,15 @@ async function prepareV4Swap(input: {
   const client = createRobinhoodPublicClient();
   const token = getAddress(market.address);
   const hoodie = getAddress(v2Product.contracts.hoodie);
-  const inputToken = input.side === "buy" ? hoodie : token;
-  const outputToken = input.side === "buy" ? token : hoodie;
-  const inputSymbol = input.side === "buy" ? "HOODIE" : market.symbol;
-  const outputSymbol = input.side === "buy" ? market.symbol : "HOODIE";
+  const weth = getAddress(v2Product.contracts.weth);
+  const nativeCurrency = input.currency === "eth";
+  const nativeInput = nativeCurrency && input.side === "buy";
+  const nativeOutput = nativeCurrency && input.side === "sell";
+  const counterSymbol = nativeCurrency ? "ETH" : "HOODIE";
+  const inputToken = input.side === "buy" ? (nativeInput ? weth : hoodie) : token;
+  const outputToken = input.side === "buy" ? token : (nativeOutput ? weth : hoodie);
+  const inputSymbol = input.side === "buy" ? counterSymbol : market.symbol;
+  const outputSymbol = input.side === "buy" ? market.symbol : counterSymbol;
   const amountIn = parseUnits(input.amount, 18);
   if (amountIn <= 0n || amountIn > 2n ** 128n - 1n) {
     throw new Error("Swap amount is outside the supported V4 range");
@@ -455,38 +499,83 @@ async function prepareV4Swap(input: {
   if (computePoolId(poolKey).toLowerCase() !== market.poolId.toLowerCase()) {
     throw new Error("Canonical V4 PoolId does not match its PoolKey");
   }
-  const zeroForOne =
-    inputToken.toLowerCase() === poolKey.currency0.toLowerCase();
+  const referencePoolKey = nativeCurrency ? getHoodieReferencePoolKey() : null;
   const sdk = new DopplerSDK({
     publicClient: client,
     chainId: ROBINHOOD_CHAIN_ID,
   });
-  const quote = await sdk.quoter.quoteExactInputV4Quoter({
-      poolKey,
-      zeroForOne,
-      exactAmount: amountIn,
+  const quoteSingle = (
+    key: V4PoolKey,
+    hopInputToken: Address,
+    exactAmount: bigint,
+  ) =>
+    sdk.quoter.quoteExactInputV4Quoter({
+      poolKey: key,
+      zeroForOne:
+        hopInputToken.toLowerCase() === key.currency0.toLowerCase(),
+      exactAmount,
       hookData: "0x",
-  }).catch(() => {
+    });
+
+  let amountOut: bigint;
+  try {
+    if (nativeInput && referencePoolKey) {
+      const referenceHop = await quoteSingle(referencePoolKey, weth, amountIn);
+      const childHop = await quoteSingle(poolKey, hoodie, referenceHop.amountOut);
+      amountOut = childHop.amountOut;
+    } else if (nativeOutput && referencePoolKey) {
+      const childHop = await quoteSingle(poolKey, token, amountIn);
+      const referenceHop = await quoteSingle(
+        referencePoolKey,
+        hoodie,
+        childHop.amountOut,
+      );
+      amountOut = referenceHop.amountOut;
+    } else {
+      const single = await quoteSingle(poolKey, inputToken, amountIn);
+      amountOut = single.amountOut;
+    }
+  } catch (error) {
+    if (input.side === "sell" && isNotEnoughLiquidityRevert(error)) {
+      throw new SwapPreparationError(
+        "Nobody has bought this token yet, so the pool has no sell-side liquidity. Sells open after the first buy.",
+        { code: "QUOTE_UNAVAILABLE", inputSymbol },
+      );
+    }
     throw new SwapPreparationError(
       "The canonical V4 pool cannot quote this trade. Try a smaller amount.",
       { code: "QUOTE_UNAVAILABLE", inputSymbol },
     );
+  }
+  if (amountOut <= 0n) {
+    throw new SwapPreparationError(
+      "This trade quotes to zero output. Try a larger amount.",
+      { code: "QUOTE_UNAVAILABLE", inputSymbol },
+    );
+  }
+  const childBalance = await client.readContract({
+    address: token,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [account],
   });
-  const amountOut = quote.amountOut;
-  if (
-    input.side === "buy" &&
-    market.balanceLimitActive
-  ) {
-    const childBalance = await client.readContract({
-      address: token,
-      abi: erc20Abi,
-      functionName: "balanceOf",
-      args: [account],
-    });
-    if (childBalance + amountOut > BigInt(market.maxBalanceRaw)) {
+  if (input.side === "buy" && market.balanceLimitActive) {
+    const maxBalance = BigInt(market.maxBalanceRaw);
+    if (childBalance + amountOut > maxBalance) {
+      const remaining = maxBalance - childBalance;
+      const maximumRaw = remaining > 0n
+        ? amountIn * remaining / amountOut
+        : 0n;
+      const maximumAmount = formattedMaximumInput(maximumRaw);
       throw new SwapPreparationError(
-        "This buy would exceed the active 2% maximum-wallet limit.",
-        { code: "MAX_WALLET", inputSymbol },
+        maximumRaw === 0n
+          ? "This wallet has reached the active 2% maximum-wallet limit."
+          : `This buy would exceed the active 2% maximum-wallet limit. Try at most about ${maximumAmount} ${inputSymbol}.`,
+        {
+          code: "MAX_WALLET",
+          maximumAmount: maximumRaw > 0n ? maximumAmount : undefined,
+          inputSymbol,
+        },
       );
     }
   }
@@ -497,68 +586,105 @@ async function prepareV4Swap(input: {
   const now = Math.floor(Date.now() / 1_000);
   const deadline = BigInt(now + 20 * 60);
   const approvalExpiration = now + 20 * 60;
-  const [inputBalance, tokenAllowance, permitAllowance] = await Promise.all([
-    client.readContract({
-      address: inputToken,
-      abi: erc20Abi,
-      functionName: "balanceOf",
-      args: [account],
-    }),
-    client.readContract({
-      address: inputToken,
-      abi: erc20Abi,
-      functionName: "allowance",
-      args: [account, permit2],
-    }),
-    client.readContract({
-      address: permit2,
-      abi: permit2AllowanceAbi,
-      functionName: "allowance",
-      args: [account, inputToken, router],
-    }),
-  ]);
-  if (inputBalance < amountIn) {
-    throw new Error(`Insufficient ${inputSymbol} balance`);
-  }
   const approvalTransactions: PreparedWalletTransaction[] = [];
-  if (tokenAllowance < amountIn) {
-    approvalTransactions.push({
-      kind: "token-approval",
-      label: `Approve exact ${inputSymbol} input for Permit2`,
-      from: account,
-      to: inputToken,
-      data: encodeFunctionData({
+  let inputBalance: bigint;
+  if (nativeInput) {
+    inputBalance = await client.getBalance({ address: account });
+    if (inputBalance < amountIn) {
+      throw new Error("Insufficient ETH balance");
+    }
+  } else {
+    const [balance, tokenAllowance, permitAllowance] = await Promise.all([
+      input.side === "sell"
+        ? Promise.resolve(childBalance)
+        : client.readContract({
+            address: inputToken,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [account],
+          }),
+      client.readContract({
+        address: inputToken,
         abi: erc20Abi,
-        functionName: "approve",
-        args: [permit2, amountIn],
+        functionName: "allowance",
+        args: [account, permit2],
       }),
-      value: "0x0",
-    });
-  } else if (
-    permitAllowance[0] < amountIn ||
-    Number(permitAllowance[1]) <= now
-  ) {
-    approvalTransactions.push({
-      kind: "permit2-approval",
-      label: `Authorize exact ${inputSymbol} input for 20 minutes`,
-      from: account,
-      to: permit2,
-      data: encodeFunctionData({
+      client.readContract({
+        address: permit2,
         abi: permit2AllowanceAbi,
-        functionName: "approve",
-        args: [inputToken, router, amountIn, approvalExpiration],
+        functionName: "allowance",
+        args: [account, inputToken, router],
       }),
-      value: "0x0",
-    });
+    ]);
+    inputBalance = balance;
+    if (inputBalance < amountIn) {
+      throw new Error(`Insufficient ${inputSymbol} balance`);
+    }
+    // A fresh wallet needs both grants; return them together so one prepare,
+    // one approval round, and one re-prepare reach a simulated swap.
+    if (tokenAllowance < amountIn) {
+      approvalTransactions.push({
+        kind: "token-approval",
+        label: `Approve exact ${inputSymbol} input for Permit2`,
+        from: account,
+        to: inputToken,
+        data: encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [permit2, amountIn],
+        }),
+        value: "0x0",
+      });
+    }
+    if (
+      permitAllowance[0] < amountIn ||
+      Number(permitAllowance[1]) <= now
+    ) {
+      approvalTransactions.push({
+        kind: "permit2-approval",
+        label: `Authorize exact ${inputSymbol} input for 20 minutes`,
+        from: account,
+        to: permit2,
+        data: encodeFunctionData({
+          abi: permit2AllowanceAbi,
+          functionName: "approve",
+          args: [inputToken, router, amountIn, approvalExpiration],
+        }),
+        value: "0x0",
+      });
+    }
   }
-  const swapData = encodeV4ExactInputSwap({
-    poolKey,
-    tokenIn: inputToken,
-    tokenOut: outputToken,
-    amountIn,
-    minimumOut,
-    deadline,
-  });
+  const swapData = nativeInput && referencePoolKey
+    ? encodeV4EthToChildSwap({
+        referencePoolKey,
+        childPoolKey: poolKey,
+        weth,
+        hoodie,
+        child: token,
+        amountIn,
+        minimumOut,
+        deadline,
+      })
+    : nativeOutput && referencePoolKey
+      ? encodeV4ChildToEthSwap({
+          childPoolKey: poolKey,
+          referencePoolKey,
+          child: token,
+          hoodie,
+          weth,
+          amountIn,
+          minimumOut,
+          deadline,
+        })
+      : encodeV4ExactInputSwap({
+          poolKey,
+          tokenIn: inputToken,
+          tokenOut: outputToken,
+          amountIn,
+          minimumOut,
+          deadline,
+        });
+  const transactionValue: Hex = nativeInput ? numberToHex(amountIn) : "0x0";
   let swapTransaction: PreparedWalletTransaction | null = null;
   if (approvalTransactions.length === 0) {
     let gasEstimate: bigint;
@@ -567,6 +693,7 @@ async function prepareV4Swap(input: {
         account,
         to: router,
         data: swapData,
+        ...(nativeInput ? { value: amountIn } : {}),
       });
     } catch {
       throw new SwapPreparationError(
@@ -581,7 +708,7 @@ async function prepareV4Swap(input: {
       to: router,
       data: swapData,
       gasLimit: (gasEstimate * 120n / 100n).toString(),
-      value: "0x0",
+      value: transactionValue,
     };
   }
   const inputValue = Number(formatUnits(amountIn, 18));
@@ -590,7 +717,10 @@ async function prepareV4Swap(input: {
   const executionPrice = input.side === "buy"
     ? inputValue / outputValue
     : outputValue / inputValue;
+  // The spot price is HOODIE-denominated, so execution impact is only
+  // comparable for HOODIE-side trades; ETH multihop trades report no impact.
   const priceImpactPercent =
+    !nativeCurrency &&
     Number.isFinite(executionPrice) && Number.isFinite(spotPrice) && spotPrice > 0
       ? Math.abs((executionPrice / spotPrice) - 1) * 100
       : null;
@@ -625,11 +755,16 @@ export async function prepareHoodiePadSwap(input: {
   side: SwapSide;
   amount: string;
   slippageBps: number;
+  currency?: SwapCurrency;
 }): Promise<PreparedSwap> {
   const account = getAddress(input.account);
   const token = getAddress(input.token);
   if (input.side !== "buy" && input.side !== "sell") {
     throw new Error("Choose buy or sell");
+  }
+  const currency: SwapCurrency = input.currency ?? "hoodie";
+  if (currency !== "hoodie" && currency !== "eth") {
+    throw new Error("Choose HOODIE or ETH as the counter currency");
   }
   if (!/^(?:0|[1-9]\d*)(?:\.\d{0,18})?$/.test(input.amount.trim())) {
     throw new Error("Enter a valid token amount");
@@ -650,7 +785,11 @@ export async function prepareHoodiePadSwap(input: {
       side: input.side,
       amount: input.amount,
       slippageBps: input.slippageBps,
+      currency,
     });
+  }
+  if (currency !== "hoodie") {
+    throw new Error("Legacy V3 markets trade only against HOODIE");
   }
   const market = await readHoodiePadMarket(token, client);
   if (!market.official) throw new Error("This is not an official HoodiePad market");

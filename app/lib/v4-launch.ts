@@ -14,7 +14,7 @@ import {
   type PublicClient,
 } from "viem";
 import product from "../../config/hoodiepad-v2.json";
-import { robinhood } from "./protocol";
+import { getRobinhoodRpcUrl, robinhood } from "./protocol";
 import {
   formatRational,
   invertRational,
@@ -82,13 +82,11 @@ function decimalToRational(value: string): Rational {
 }
 
 function rpcUrl() {
-  const explicit = process.env.ROBINHOOD_RPC_URL?.trim();
-  if (explicit) return explicit;
-  const alchemyKey = process.env.Alchemy_API_KEY?.trim();
-  if (alchemyKey) {
-    return `https://robinhood-mainnet.g.alchemy.com/v2/${alchemyKey}`;
-  }
-  throw new Error("Robinhood RPC is not configured");
+  // Launch simulation never falls back to the public RPC: broadcast-facing
+  // paths fail closed when the environment is not explicitly configured.
+  const url = getRobinhoodRpcUrl({ requireExplicitRpc: true });
+  if (!url) throw new Error("Robinhood RPC is not configured");
+  return url;
 }
 
 async function readCoinbaseEthUsd(now = Date.now()) {
@@ -126,11 +124,54 @@ async function readCoinbaseEthUsd(now = Date.now()) {
   };
 }
 
+// Secondary ETH/USD source used only to cross-check the primary within
+// pricing.maximumSourceDeviationBps. Soft-fails to null when unreachable so a
+// Kraken outage cannot block launches; a live-but-deviating source does.
+async function readKrakenEthUsd(): Promise<number | null> {
+  try {
+    const response = await fetch(
+      "https://api.kraken.com/0/public/Ticker?pair=ETHUSD",
+      {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(5_000),
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) return null;
+    const payload = await response.json() as {
+      error?: unknown[];
+      result?: Record<string, { c?: unknown[] }>;
+    };
+    if (Array.isArray(payload.error) && payload.error.length > 0) return null;
+    const pair = payload.result ? Object.values(payload.result)[0] : undefined;
+    const last = pair?.c?.[0];
+    const value = typeof last === "string" ? Number(last) : NaN;
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function assertEthUsdSourcesAgree(
+  primaryText: string,
+  secondary: number | null,
+) {
+  if (secondary === null) return;
+  const primary = Number(primaryText);
+  if (!Number.isFinite(primary) || primary <= 0) return;
+  const deviationBps = Math.abs(primary - secondary) / primary * 10_000;
+  if (deviationBps > product.pricing.maximumSourceDeviationBps) {
+    throw new Error(
+      `ETH/USD sources deviate by ${deviationBps.toFixed(0)} bps; the allowed maximum is ${product.pricing.maximumSourceDeviationBps} bps`,
+    );
+  }
+}
+
 export async function readV4PriceSnapshot(
   client: PublicClient,
 ): Promise<V4PriceSnapshot> {
   const referencePoolId = getHoodieReferencePoolId();
-  const [block, slot0, ethUsd] = await Promise.all([
+  const [block, slot0, ethUsd, krakenEthUsd] = await Promise.all([
     client.getBlock(),
     client.readContract({
       address: getAddress(product.contracts.uniswapV4StateView),
@@ -139,7 +180,9 @@ export async function readV4PriceSnapshot(
       args: [referencePoolId],
     }),
     readCoinbaseEthUsd(),
+    readKrakenEthUsd(),
   ]);
+  await assertEthUsdSourcesAgree(ethUsd.text, krakenEthUsd);
   if (slot0[0] === 0n) {
     throw new Error("HOODIE/WETH V4 reference pool is uninitialized");
   }

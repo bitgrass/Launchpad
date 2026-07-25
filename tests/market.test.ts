@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { createRobinhoodPublicClient } from "../app/lib/protocol";
 import { readHoodiePadMarket } from "../app/lib/market";
+import { isRehypeStartingTimeValid } from "../app/lib/market-v4";
 import { putStoredObject } from "../app/lib/object-storage";
 import product from "../config/hoodiepad-v1.json";
 
@@ -109,4 +110,18 @@ test("reads a confirmed HoodiePad market from canonical onchain state", async ()
     }
     await rm(storageRoot, { recursive: true, force: true });
   }
+});
+
+test("accepts the Rehype-stamped launch timestamp for a no-decay fee schedule", () => {
+  const nowSeconds = 1_785_000_000;
+  // The RehypeDopplerHook replaces a requested startingTime of 0 with the
+  // pool-initialization timestamp, so any recorded past moment is valid.
+  assert.equal(isRehypeStartingTimeValid(0, 1_784_935_062, nowSeconds), true);
+  assert.equal(isRehypeStartingTimeValid(0, 0, nowSeconds), true);
+  assert.equal(isRehypeStartingTimeValid(0, nowSeconds + 200, nowSeconds), true);
+  assert.equal(isRehypeStartingTimeValid(0, nowSeconds + 400, nowSeconds), false);
+  assert.equal(isRehypeStartingTimeValid(0, -1, nowSeconds), false);
+  // A non-zero configured schedule still requires the exact moment.
+  assert.equal(isRehypeStartingTimeValid(1_784_935_062, 1_784_935_062, nowSeconds), true);
+  assert.equal(isRehypeStartingTimeValid(1_784_935_062, 1_784_935_063, nowSeconds), false);
 });

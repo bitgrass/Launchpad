@@ -72,7 +72,8 @@ async function checksum(value: unknown) {
 async function readV4ChainStatus(): Promise<V4ChainStatus> {
   const checkedAt = new Date().toISOString();
   try {
-    const client = createRobinhoodPublicClient();
+    // Launch preparation fails closed unless the RPC is explicitly configured.
+    const client = createRobinhoodPublicClient({ requireExplicitRpc: true });
     const [chainId, blockNumber, airlockOwner, runtimeSnapshotVerified] =
       await Promise.all([
       client.getChainId(),
@@ -287,7 +288,7 @@ export async function POST(request: Request) {
   if (simulationGatesPassed) {
     try {
       const result = await simulateV4Launch(
-        createRobinhoodPublicClient(),
+        createRobinhoodPublicClient({ requireExplicitRpc: true }),
         {
           name: normalized.name,
           symbol,

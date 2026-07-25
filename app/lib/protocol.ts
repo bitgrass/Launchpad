@@ -84,20 +84,34 @@ function asAddress(value: string) {
   return value as Address;
 }
 
-function rpcUrl() {
+export function getRobinhoodRpcUrl(
+  options: { requireExplicitRpc?: boolean } = {},
+) {
   const explicit = process.env.ROBINHOOD_RPC_URL?.trim();
   if (explicit) return explicit;
-  const alchemyKey = process.env.Alchemy_API_KEY?.trim();
+  const alchemyKey =
+    (process.env.Alchemy_API_KEY ?? process.env.ALCHEMY_API_KEY)?.trim();
   if (alchemyKey) return `https://robinhood-mainnet.g.alchemy.com/v2/${alchemyKey}`;
-  return "";
+  // Launch preparation fails closed without an explicitly configured RPC
+  // (AGENTS.md rule 12); public data reads fall back to the pinned public
+  // Robinhood RPC so a missing env var degrades instead of taking every data
+  // endpoint down.
+  if (options.requireExplicitRpc) return "";
+  return product.network.rpcUrl?.trim() ?? "";
+}
+
+function rpcUrl() {
+  return getRobinhoodRpcUrl();
 }
 
 export function hasConfiguredRpc() {
   return rpcUrl().length > 0;
 }
 
-export function createRobinhoodPublicClient() {
-  const url = rpcUrl();
+export function createRobinhoodPublicClient(
+  options: { requireExplicitRpc?: boolean } = {},
+) {
+  const url = getRobinhoodRpcUrl(options);
   if (!url) throw new Error("Robinhood RPC is not configured");
   return createPublicClient({ chain: robinhood, transport: http(url, { timeout: 12_000 }) });
 }

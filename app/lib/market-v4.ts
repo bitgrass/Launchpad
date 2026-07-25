@@ -58,6 +58,21 @@ export type HoodiePadV4Market = HoodiePadMarket & {
   validationErrors: string[];
 };
 
+// The Rehype hook stamps the pool-initialization timestamp into the fee
+// schedule even when the launch requests startingTime 0, so a no-decay
+// schedule is valid whenever the recorded time is not in the future. A
+// non-zero configured value still requires an exact match.
+export function isRehypeStartingTimeValid(
+  configuredStartingTime: number,
+  onChainStartingTime: number,
+  nowSeconds = Math.floor(Date.now() / 1000),
+) {
+  if (configuredStartingTime === 0) {
+    return onChainStartingTime >= 0 && onChainStartingTime <= nowSeconds + 300;
+  }
+  return onChainStartingTime === configuredStartingTime;
+}
+
 export function v4PriceForMarket(
   poolKey: V4PoolKey,
   sqrtPriceX96: bigint,
@@ -204,6 +219,10 @@ export async function readHoodiePadV4Market(
   );
   const fdvHoodie = calculateFdv(hoodiePerToken, totalSupply, decimals);
   const configuredDistribution = product.rehype.feeDistributionInfo;
+  const rehypeStartingTimeValid = isRehypeStartingTimeValid(
+    product.rehype.startingTime,
+    Number(feeSchedule[0]),
+  );
   const validationChecks: Array<[string, boolean]> = [
     ["Airlock numeraire", isSameAddress(assetData[0], product.contracts.hoodie)],
     ["NoOp migrator", isSameAddress(assetData[3], product.contracts.noOpMigrator)],
@@ -223,10 +242,7 @@ export async function readHoodiePadV4Market(
     ["PoolKey dynamic fee flag", poolKey.fee === V4_DYNAMIC_FEE_FLAG],
     ["PoolKey tick spacing", poolKey.tickSpacing === V4_TICK_SPACING],
     ["Active LP fee", Number(slot0[3]) === V4_LP_FEE],
-    [
-      "Rehype starting time",
-      Number(feeSchedule[0]) === product.rehype.startingTime,
-    ],
+    ["Rehype starting time", rehypeStartingTimeValid],
     ["Rehype start fee", Number(feeSchedule[1]) === 0],
     ["Rehype end fee", Number(feeSchedule[2]) === 0],
     ["Rehype minimum fee", Number(feeSchedule[3]) === 0],

@@ -107,9 +107,14 @@ export function getV4Beneficiaries(
     throw new Error("V4 fee beneficiary shares must total WAD");
   }
 
-  return beneficiaries.sort((first, second) =>
-    first.beneficiary.toLowerCase().localeCompare(second.beneficiary.toLowerCase()),
-  );
+  // The DopplerHookInitializer requires strictly ascending beneficiary
+  // addresses; use ordinal comparison (like the SDK) — localeCompare collation
+  // is locale-dependent and can disagree with numeric address order.
+  return beneficiaries.sort((first, second) => {
+    const left = first.beneficiary.toLowerCase();
+    const right = second.beneficiary.toLowerCase();
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
 }
 
 export function getHoodieV4Curve() {

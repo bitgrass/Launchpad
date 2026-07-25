@@ -27,11 +27,6 @@ type PreparedLaunch = {
     available: boolean;
     blockNumber?: string;
     airlockOwner?: string;
-    referencePool?: {
-      tick: number;
-      liquidity: string;
-      hoodiePerWeth: string;
-    };
   };
   simulation: {
     status: "simulated" | "unavailable";
@@ -39,10 +34,13 @@ type PreparedLaunch = {
     pool?: string;
     gasEstimate?: string;
     error?: string;
-    curve?: {
-      startTick: number;
-      endTick: number;
-      referenceTick: number;
+    priceReference?: {
+      ethUsd: string;
+      ethUsdSource: string;
+      ethUsdTimestamp: string;
+      hoodiePerWeth: string;
+      hoodieUsd: string;
+      referenceBlock: string;
     };
   };
   deployment: {
@@ -139,6 +137,7 @@ export function LaunchWizard() {
     "idle" | "uploading" | "preparing" | "deploying" | "confirming" | "deployed" | "error"
   >("idle");
   const [prepared, setPrepared] = useState<PreparedLaunch | null>(null);
+  const [uploadedArtwork, setUploadedArtwork] = useState<UploadedArtwork | null>(null);
   const [preparedWallet, setPreparedWallet] = useState("");
   const [transactionHash, setTransactionHash] = useState("");
   const [confirmedDeployment, setConfirmedDeployment] = useState<ConfirmedDeployment | null>(null);
@@ -172,6 +171,7 @@ export function LaunchWizard() {
 
   function chooseArtwork(file: File | undefined) {
     setPrepared(null);
+    setUploadedArtwork(null);
     setPreparedWallet("");
     setTransactionHash("");
     setConfirmedDeployment(null);
@@ -206,6 +206,22 @@ export function LaunchWizard() {
     return (await response.json()) as UploadedArtwork;
   }
 
+  async function requestPrepare(uploaded: UploadedArtwork) {
+    const response = await fetch("/api/launch/prepare", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...draft,
+        artworkKey: uploaded.key,
+        artworkUrl: uploaded.url,
+        artworkSha256: uploaded.sha256,
+        payoutWallet: address,
+      }),
+    });
+    if (!response.ok) throw new Error("Preparation failed");
+    return (await response.json()) as PreparedLaunch;
+  }
+
   async function prepareLaunch(event: FormEvent) {
     event.preventDefault();
     if (!validMetadata || !validWallet || !agreed) return;
@@ -217,20 +233,9 @@ export function LaunchWizard() {
     setStatus("uploading");
     try {
       const uploaded = await uploadArtwork();
+      setUploadedArtwork(uploaded);
       setStatus("preparing");
-      const response = await fetch("/api/launch/prepare", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...draft,
-          artworkKey: uploaded.key,
-          artworkUrl: uploaded.url,
-          artworkSha256: uploaded.sha256,
-          payoutWallet: address,
-        }),
-      });
-      if (!response.ok) throw new Error("Preparation failed");
-      setPrepared((await response.json()) as PreparedLaunch);
+      setPrepared(await requestPrepare(uploaded));
       setPreparedWallet(address);
       setStatus("idle");
     } catch (error) {
@@ -245,25 +250,48 @@ export function LaunchWizard() {
 
   async function deployLaunch() {
     if (!prepared?.productionReady || !prepared.deployment || preparedWallet !== address) return;
-    if (Date.now() >= new Date(prepared.deployment.validUntil).getTime()) {
+    setErrorMessage("");
+    setStatus("deploying");
+    // Re-simulate immediately before signing so the curve ticks, max-wallet
+    // window, and validity always reflect the current chain state rather than
+    // the state at review time.
+    let deployable = prepared;
+    try {
+      if (!uploadedArtwork) throw new Error("Prepare the launch again first.");
+      const fresh = await requestPrepare(uploadedArtwork);
+      if (!fresh.productionReady || !fresh.deployment) {
+        throw new Error(
+          fresh.blockers[0] ?? "The launch is no longer deployable. Prepare it again.",
+        );
+      }
+      deployable = fresh;
+      setPrepared(fresh);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not refresh the launch simulation. Try again.",
+      );
+      setStatus("error");
+      return;
+    }
+    if (Date.now() >= new Date(deployable.deployment!.validUntil).getTime()) {
       setErrorMessage("This deployment preview expired. Prepare a fresh simulation before signing.");
       setPrepared(null);
       setPreparedWallet("");
       setStatus("error");
       return;
     }
-    setErrorMessage("");
-    setStatus("deploying");
     let submittedHash = "";
     try {
-      const hash = await sendTransaction(prepared.deployment);
+      const hash = await sendTransaction(deployable.deployment!);
       submittedHash = hash;
       setTransactionHash(hash);
       setStatus("confirming");
       const confirmed = await confirmDeployment(
         hash,
-        prepared.deployment.predictedToken,
-        prepared.deployment.predictedPool,
+        deployable.deployment!.predictedToken,
+        deployable.deployment!.predictedPool,
       );
       setConfirmedDeployment(confirmed);
       setStatus("deployed");
@@ -444,8 +472,19 @@ export function LaunchWizard() {
                     <div><dt>Predicted PoolId</dt><dd>{prepared.simulation.pool ? shorten(prepared.simulation.pool) : "—"}</dd></div>
                     <div><dt>Gas estimate</dt><dd>{prepared.simulation.gasEstimate ?? "—"}</dd></div>
                     <div><dt>Fork calibration</dt><dd>{prepared.calibration.approved ? `Block ${prepared.calibration.forkBlock}` : prepared.calibration.status}</dd></div>
+                    {prepared.simulation.priceReference && (
+                      <>
+                        <div><dt>ETH/USD ({prepared.simulation.priceReference.ethUsdSource})</dt><dd>${prepared.simulation.priceReference.ethUsd}</dd></div>
+                        <div><dt>HOODIE/USD basis</dt><dd>${Number(prepared.simulation.priceReference.hoodieUsd).toExponential(4)}</dd></div>
+                      </>
+                    )}
                   </dl>
                 )}
+                <p className="trade-warning">
+                  The exact opening curve is re-simulated against live chain
+                  state at the moment you press deploy; MetaMask always shows
+                  the final transaction.
+                </p>
                 <ul>{prepared.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
               </div>
             )}

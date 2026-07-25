@@ -49,13 +49,64 @@ const erc20TransferEvent = parseAbiItem(
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 const launchStartBlock = BigInt(product.discovery.launchStartBlock);
 const logChunkSize = BigInt(product.discovery.logChunkSize);
+// Rescan this many trailing blocks on every refresh so shallow reorgs cannot
+// leave stale events in the incremental caches; duplicates are dropped by id.
+const reorgSafetyBlocks = 5n;
+
+type SwapLogCache = {
+  lastScannedBlock: bigint;
+  seen: Set<string>;
+  logs: DecodedChainEvent[];
+};
+
+type TransferCache = {
+  lastScannedBlock: bigint;
+  seen: Set<string>;
+  balances: Map<string, bigint>;
+  checksumAddresses: Map<string, Address>;
+};
+
+type V4RegistryCaches = {
+  discovery?: {
+    lastScannedBlock: bigint;
+    creates: DecodedChainEvent[];
+  };
+  swapLogs: Map<string, SwapLogCache>;
+  transfers: Map<string, TransferCache>;
+  transactionSenders: Map<Hex, Address>;
+  blockTimestamps: Map<string, number>;
+};
+
+export function createV4RegistryCaches(): V4RegistryCaches {
+  return {
+    swapLogs: new Map(),
+    transfers: new Map(),
+    transactionSenders: new Map(),
+    blockTimestamps: new Map(),
+  };
+}
+
+let globalRegistryCaches = createV4RegistryCaches();
 
 let cachedV4Launches:
   | { expiresAt: number; promise: Promise<HoodiePadLaunch[]> }
   | undefined;
 
+export function resetV4RegistryCaches() {
+  globalRegistryCaches = createV4RegistryCaches();
+  cachedV4Launches = undefined;
+}
+
 function absolute(value: bigint) {
   return value < 0n ? -value : value;
+}
+
+function bigintMax(first: bigint, second: bigint) {
+  return first > second ? first : second;
+}
+
+function eventId(log: DecodedChainEvent) {
+  return `${log.transactionHash ?? "0x"}:${log.logIndex ?? -1}`;
 }
 
 function compactAmount(raw: bigint, decimals = 18) {
@@ -67,7 +118,7 @@ function compactAmount(raw: bigint, decimals = 18) {
   }).format(value);
 }
 
-async function readEventChunks(
+async function readCreateChunks(
   client: RobinhoodClient,
   input: {
     fromBlock: bigint;
@@ -152,6 +203,91 @@ async function readTransferChunks(
   return events;
 }
 
+async function readCachedSwapLogs(
+  client: RobinhoodClient,
+  caches: V4RegistryCaches,
+  poolId: Hex,
+  fromBlock: bigint,
+  latestBlock: bigint,
+) {
+  const key = poolId.toLowerCase();
+  let cache = caches.swapLogs.get(key);
+  if (!cache) {
+    cache = { lastScannedBlock: fromBlock - 1n, seen: new Set(), logs: [] };
+    caches.swapLogs.set(key, cache);
+  }
+  const scanFrom = bigintMax(
+    fromBlock,
+    cache.lastScannedBlock + 1n - reorgSafetyBlocks,
+  );
+  if (scanFrom <= latestBlock) {
+    const fresh = await readV4SwapChunks(client, poolId, scanFrom, latestBlock);
+    for (const log of fresh) {
+      const id = eventId(log);
+      if (cache.seen.has(id)) continue;
+      cache.seen.add(id);
+      cache.logs.push(log);
+    }
+    cache.lastScannedBlock = latestBlock;
+  }
+  return cache.logs;
+}
+
+async function readCachedTransferBalances(
+  client: RobinhoodClient,
+  caches: V4RegistryCaches,
+  token: Address,
+  fromBlock: bigint,
+  latestBlock: bigint,
+) {
+  const key = token.toLowerCase();
+  let cache = caches.transfers.get(key);
+  if (!cache) {
+    cache = {
+      lastScannedBlock: fromBlock - 1n,
+      seen: new Set(),
+      balances: new Map(),
+      checksumAddresses: new Map(),
+    };
+    caches.transfers.set(key, cache);
+  }
+  const scanFrom = bigintMax(
+    fromBlock,
+    cache.lastScannedBlock + 1n - reorgSafetyBlocks,
+  );
+  if (scanFrom <= latestBlock) {
+    const fresh = await readTransferChunks(
+      client,
+      token,
+      scanFrom,
+      latestBlock,
+    );
+    for (const log of fresh) {
+      const id = eventId(log);
+      if (cache.seen.has(id)) continue;
+      const args = log.args as {
+        from?: Address;
+        to?: Address;
+        value?: bigint;
+      };
+      if (!args.from || !args.to || args.value === undefined) continue;
+      cache.seen.add(id);
+      const from = args.from.toLowerCase();
+      const to = args.to.toLowerCase();
+      cache.checksumAddresses.set(from, getAddress(args.from));
+      cache.checksumAddresses.set(to, getAddress(args.to));
+      if (from !== zeroAddress) {
+        cache.balances.set(from, (cache.balances.get(from) ?? 0n) - args.value);
+      }
+      if (to !== zeroAddress) {
+        cache.balances.set(to, (cache.balances.get(to) ?? 0n) + args.value);
+      }
+    }
+    cache.lastScannedBlock = latestBlock;
+  }
+  return cache;
+}
+
 function formatHolderBalance(raw: bigint, decimals: number) {
   const value = Number(formatUnits(raw, decimals));
   if (!Number.isFinite(value)) return formatUnits(raw, decimals);
@@ -164,35 +300,17 @@ function formatHolderBalance(raw: bigint, decimals: number) {
 async function readV4Holders(
   market: HoodiePadV4Market,
   client: RobinhoodClient,
+  caches: V4RegistryCaches,
   fromBlock: bigint,
   toBlock: bigint,
 ) {
-  const logs = await readTransferChunks(
+  const cache = await readCachedTransferBalances(
     client,
+    caches,
     market.address,
     fromBlock,
     toBlock,
   );
-  const balances = new Map<string, bigint>();
-  const checksumAddresses = new Map<string, Address>();
-  for (const log of logs) {
-    const args = log.args as {
-      from?: Address;
-      to?: Address;
-      value?: bigint;
-    };
-    if (!args.from || !args.to || args.value === undefined) continue;
-    const from = args.from.toLowerCase();
-    const to = args.to.toLowerCase();
-    checksumAddresses.set(from, getAddress(args.from));
-    checksumAddresses.set(to, getAddress(args.to));
-    if (from !== zeroAddress) {
-      balances.set(from, (balances.get(from) ?? 0n) - args.value);
-    }
-    if (to !== zeroAddress) {
-      balances.set(to, (balances.get(to) ?? 0n) + args.value);
-    }
-  }
 
   const excluded = new Set([
     zeroAddress,
@@ -205,14 +323,14 @@ async function readV4Holders(
     product.contracts.noOpGovernanceFactory.toLowerCase(),
   ]);
   const totalSupply = BigInt(market.totalSupplyRaw);
-  const walletBalances = [...balances.entries()]
+  const walletBalances = [...cache.balances.entries()]
     .filter(([address, balance]) => balance > 0n && !excluded.has(address))
     .sort(([, first], [, second]) =>
       first === second ? 0 : first > second ? -1 : 1,
     );
   const holders: MarketHolder[] = walletBalances.slice(0, 20).map(
     ([address, balance]) => ({
-      address: checksumAddresses.get(address) ?? getAddress(address),
+      address: cache.checksumAddresses.get(address) ?? getAddress(address),
       balanceRaw: balance.toString(),
       balance: formatHolderBalance(balance, market.decimals),
       sharePercent: totalSupply > 0n
@@ -227,22 +345,23 @@ export async function readV4MarketAnalytics(
   market: HoodiePadV4Market,
   client = createRobinhoodPublicClient(),
   fromBlock = launchStartBlock,
+  caches: V4RegistryCaches = createV4RegistryCaches(),
 ): Promise<MarketAnalytics> {
   const latestBlock = await client.getBlockNumber();
   const [logs, holderData] = await Promise.all([
-    readV4SwapChunks(client, market.poolId, fromBlock, latestBlock),
-    readV4Holders(market, client, fromBlock, latestBlock),
+    readCachedSwapLogs(client, caches, market.poolId, fromBlock, latestBlock),
+    readV4Holders(market, client, caches, fromBlock, latestBlock),
   ]);
 
   const transactionHashes = [...new Set(
     logs
       .map((log) => log.transactionHash)
-      .filter((hash): hash is Hex => hash !== null),
+      .filter((hash): hash is Hex =>
+        hash !== null && !caches.transactionSenders.has(hash)),
   )];
-  const transactions = new Map<Hex, Address>();
   await Promise.all(transactionHashes.map(async (hash) => {
     const transaction = await client.getTransaction({ hash });
-    transactions.set(hash, getAddress(transaction.from));
+    caches.transactionSenders.set(hash, getAddress(transaction.from));
   }));
 
   const childIsCurrency0 =
@@ -272,18 +391,21 @@ export async function readV4MarketAnalytics(
       market.address,
       market.decimals,
     );
+    // Uniswap v4 Swap events report the swapper's balance deltas: a positive
+    // amount is received by the swapper, a negative amount is paid in. (The
+    // legacy V3 path uses the opposite, pool-perspective convention.)
     return {
       blockNumber: log.blockNumber.toString(),
       transactionHash: log.transactionHash,
       logIndex: log.logIndex ?? 0,
       timestamp: 0,
-      side: childDelta < 0n ? "buy" : "sell",
+      side: childDelta > 0n ? "buy" : "sell",
       trader:
-        transactions.get(log.transactionHash) ??
+        caches.transactionSenders.get(log.transactionHash) ??
         getAddress(zeroAddress),
       price: Number(formatRational(price, 18)),
       hoodieVolumeRaw: absolute(hoodieDelta).toString(),
-      hoodieFeeVolumeRaw: hoodieDelta > 0n ? hoodieDelta.toString() : "0",
+      hoodieFeeVolumeRaw: hoodieDelta < 0n ? (-hoodieDelta).toString() : "0",
       childVolumeRaw: absolute(childDelta).toString(),
     } satisfies MarketSwapPoint;
   }).filter((point): point is MarketSwapPoint => point !== null)
@@ -297,15 +419,14 @@ export async function readV4MarketAnalytics(
 
   const uniqueBlocks = [...new Set(
     decodedPoints.map((point) => point.blockNumber),
-  )];
-  const timestamps = new Map<string, number>();
+  )].filter((blockNumber) => !caches.blockTimestamps.has(blockNumber));
   await Promise.all(uniqueBlocks.map(async (blockNumber) => {
     const block = await client.getBlock({ blockNumber: BigInt(blockNumber) });
-    timestamps.set(blockNumber, Number(block.timestamp));
+    caches.blockTimestamps.set(blockNumber, Number(block.timestamp));
   }));
   const points = decodedPoints.map((point) => ({
     ...point,
-    timestamp: timestamps.get(point.blockNumber) ?? 0,
+    timestamp: caches.blockTimestamps.get(point.blockNumber) ?? 0,
   }));
 
   const hoodieVolumeRaw = points.reduce(
@@ -369,7 +490,7 @@ export async function readV4MarketAnalytics(
     holderCount: holderData.holderCount,
     holders: holderData.holders,
     daily: [...dailyActivity.entries()]
-      .sort(([first], [second]) => first.localeCompare(second))
+      .sort(([first], [second]) => (first < second ? -1 : first > second ? 1 : 0))
       .map(([date, activity]) => ({
         date,
         swaps: activity.swaps,
@@ -379,14 +500,43 @@ export async function readV4MarketAnalytics(
   };
 }
 
+async function readCachedCreateEvents(
+  client: RobinhoodClient,
+  caches: V4RegistryCaches,
+  latestBlock: bigint,
+) {
+  if (!caches.discovery) {
+    caches.discovery = {
+      lastScannedBlock: launchStartBlock - 1n,
+      creates: [],
+    };
+  }
+  const discovery = caches.discovery;
+  const scanFrom = bigintMax(
+    launchStartBlock,
+    discovery.lastScannedBlock + 1n - reorgSafetyBlocks,
+  );
+  if (scanFrom <= latestBlock) {
+    const seen = new Set(discovery.creates.map(eventId));
+    const fresh = await readCreateChunks(client, {
+      fromBlock: scanFrom,
+      toBlock: latestBlock,
+    });
+    for (const log of fresh) {
+      if (seen.has(eventId(log))) continue;
+      discovery.creates.push(log);
+    }
+    discovery.lastScannedBlock = latestBlock;
+  }
+  return discovery.creates;
+}
+
 async function loadV4Launches(
   client = createRobinhoodPublicClient(),
+  caches: V4RegistryCaches = createV4RegistryCaches(),
 ): Promise<HoodiePadLaunch[]> {
   const latestBlock = await client.getBlockNumber();
-  const logs = await readEventChunks(client, {
-    fromBlock: launchStartBlock,
-    toBlock: latestBlock,
-  });
+  const logs = await readCachedCreateEvents(client, caches, latestBlock);
 
   const candidates = await Promise.allSettled(logs.map(async (log) => {
     const args = log.args as {
@@ -417,6 +567,7 @@ async function loadV4Launches(
       market,
       client,
       log.blockNumber,
+      caches,
     );
     return {
       ...market,
@@ -454,14 +605,24 @@ export function readHoodiePadV4Launches() {
   if (cachedV4Launches && cachedV4Launches.expiresAt > now) {
     return cachedV4Launches.promise;
   }
-  const promise = loadV4Launches().catch((error) => {
-    cachedV4Launches = undefined;
+  const promise = loadV4Launches(
+    createRobinhoodPublicClient(),
+    globalRegistryCaches,
+  ).then((launches) => {
+    // Start the freshness window only once the scan has finished so a slow
+    // scan is not already stale (and immediately re-triggered) on arrival.
+    if (cachedV4Launches?.promise === promise) {
+      cachedV4Launches.expiresAt =
+        Date.now() + product.discovery.refreshSeconds * 1000;
+    }
+    return launches;
+  }).catch((error) => {
+    if (cachedV4Launches?.promise === promise) {
+      cachedV4Launches = undefined;
+    }
     throw error;
   });
-  cachedV4Launches = {
-    expiresAt: now + product.discovery.refreshSeconds * 1000,
-    promise,
-  };
+  cachedV4Launches = { expiresAt: Number.MAX_SAFE_INTEGER, promise };
   return promise;
 }
 

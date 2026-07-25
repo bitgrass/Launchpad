@@ -1,6 +1,7 @@
 import {
   prepareHoodiePadSwap,
   SwapPreparationError,
+  type SwapCurrency,
   type SwapSide,
 } from "../../../lib/swap";
 
@@ -10,6 +11,7 @@ type SwapRequest = {
   side?: unknown;
   amount?: unknown;
   slippageBps?: unknown;
+  currency?: unknown;
 };
 
 function safeSwapError(error: unknown) {
@@ -32,7 +34,10 @@ export async function POST(request: Request) {
     typeof body.account !== "string" ||
     (body.side !== "buy" && body.side !== "sell") ||
     typeof body.amount !== "string" ||
-    typeof body.slippageBps !== "number"
+    typeof body.slippageBps !== "number" ||
+    (body.currency !== undefined &&
+      body.currency !== "hoodie" &&
+      body.currency !== "eth")
   ) {
     return Response.json({ error: "Invalid swap request" }, { status: 422 });
   }
@@ -44,6 +49,7 @@ export async function POST(request: Request) {
       side: body.side as SwapSide,
       amount: body.amount,
       slippageBps: body.slippageBps,
+      currency: body.currency as SwapCurrency | undefined,
     });
     return Response.json(prepared, {
       headers: { "Cache-Control": "no-store" },

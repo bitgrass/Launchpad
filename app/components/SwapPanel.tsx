@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "./WalletProvider";
 
 type WalletTransaction = {
-  kind: "token-approval" | "swap";
+  kind: "token-approval" | "permit2-approval" | "swap";
   label: string;
   from: string;
   to: string;
@@ -41,19 +41,25 @@ function displayAmount(value: string) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 8 }).format(numeric);
 }
 
+const APPROVAL_ROUNDS_LIMIT = 3;
+
 export function SwapPanel({
   token,
   symbol,
   poolUrl,
   marketVersion = "doppler-lockable-v3-v1",
+  tradingEnabled = true,
 }: {
   token: string;
   symbol: string;
   poolUrl: string;
   marketVersion?: "doppler-lockable-v3-v1" | "doppler-multicurve-v4-v2";
+  tradingEnabled?: boolean;
 }) {
   const { address, connect, sendTransaction, waitForTransaction } = useWallet();
+  const isV4 = marketVersion === "doppler-multicurve-v4-v2";
   const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [currency, setCurrency] = useState<"hoodie" | "eth">("hoodie");
   const [amount, setAmount] = useState("");
   const [slippageBps, setSlippageBps] = useState(100);
   const [prepared, setPrepared] = useState<PreparedSwap | null>(null);
@@ -67,7 +73,14 @@ export function SwapPanel({
     const response = await fetch("/api/swap/prepare", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, account: address, side, amount, slippageBps }),
+      body: JSON.stringify({
+        token,
+        account: address,
+        side,
+        amount,
+        slippageBps,
+        ...(isV4 ? { currency } : {}),
+      }),
     });
     const payload = await response.json() as PreparedSwap & SwapErrorPayload;
     if (!response.ok) {
@@ -80,7 +93,7 @@ export function SwapPanel({
       throw quoteFailure;
     }
     return payload;
-  }, [address, amount, side, slippageBps, token]);
+  }, [address, amount, currency, isV4, side, slippageBps, token]);
 
   useEffect(() => {
     if (!address || !amount || Number(amount) <= 0) return;
@@ -111,6 +124,12 @@ export function SwapPanel({
     };
   }, [address, amount, prepare]);
 
+  function resetQuote() {
+    setPrepared(null);
+    setQuoteError("");
+    setSuggestedMaximum("");
+  }
+
   async function executeSwap() {
     if (!address) {
       await connect();
@@ -123,14 +142,21 @@ export function SwapPanel({
     setTransactionHash("");
     try {
       let current = await prepare();
-      const approvals = current.approvalTransactions;
-      for (let index = 0; index < approvals.length; index += 1) {
-        const transaction = approvals[index];
-        setProgress(`${transaction.label} (${index + 1}/${approvals.length})`);
-        const hash = await sendTransaction(transaction);
-        await waitForTransaction(hash);
-      }
-      if (approvals.length > 0) {
+      // A fresh wallet may need an ERC-20 approval and a Permit2 authorization
+      // before the swap simulates; run each returned approval round, then
+      // re-prepare until the exact swap transaction is available.
+      for (
+        let round = 0;
+        round < APPROVAL_ROUNDS_LIMIT && current.approvalTransactions.length > 0;
+        round += 1
+      ) {
+        const approvals = current.approvalTransactions;
+        for (let index = 0; index < approvals.length; index += 1) {
+          const transaction = approvals[index];
+          setProgress(`${transaction.label} (${index + 1}/${approvals.length})`);
+          const hash = await sendTransaction(transaction);
+          await waitForTransaction(hash);
+        }
         setProgress("Re-simulating the exact swap…");
         current = await prepare();
       }
@@ -159,18 +185,19 @@ export function SwapPanel({
     }
   }
 
-  const inputSymbol = side === "buy" ? "HOODIE" : symbol;
-  const outputSymbol = side === "buy" ? symbol : "HOODIE";
+  const counterSymbol = isV4 && currency === "eth" ? "ETH" : "HOODIE";
+  const inputSymbol = side === "buy" ? counterSymbol : symbol;
+  const outputSymbol = side === "buy" ? symbol : counterSymbol;
 
-  if (marketVersion === "doppler-multicurve-v4-v2") {
+  if (isV4 && !tradingEnabled) {
     return (
       <aside className="trade-panel">
         <span className="preview-label">TRADE CANONICAL V4 POOL</span>
-        <h2>V4 market detected.</h2>
+        <h2>In-app trading is gated.</h2>
         <p className="trade-warning">
-          HoodiePad has verified this V4 market. Deterministic in-app V4 routing
-          remains disabled until the Robinhood V4 quote, Permit2, native ETH,
-          and fee-claim fork gates all pass.
+          The Robinhood V4 fork calibration report for this build is not
+          approved, so deterministic in-app routing stays disabled. Re-run and
+          approve the calibration to enable trading.
         </p>
         <a
           className="button button-primary full-width"
@@ -178,7 +205,7 @@ export function SwapPanel({
           target="_blank"
           rel="noreferrer"
         >
-          Open canonical V4 pool on Uniswap ↗
+          View canonical V4 pool on Uniswap ↗
         </a>
       </aside>
     );
@@ -186,7 +213,9 @@ export function SwapPanel({
 
   return (
     <aside className="trade-panel">
-      <span className="preview-label">TRADE CANONICAL POOL</span>
+      <span className="preview-label">
+        {isV4 ? "TRADE CANONICAL V4 POOL" : "TRADE CANONICAL POOL"}
+      </span>
       <div className="trade-tabs">
         <button
           type="button"
@@ -194,9 +223,7 @@ export function SwapPanel({
           onClick={() => {
             setSide("buy");
             setAmount("");
-            setPrepared(null);
-            setQuoteError("");
-            setSuggestedMaximum("");
+            resetQuote();
           }}
         >
           Buy
@@ -207,14 +234,38 @@ export function SwapPanel({
           onClick={() => {
             setSide("sell");
             setAmount("");
-            setPrepared(null);
-            setQuoteError("");
-            setSuggestedMaximum("");
+            resetQuote();
           }}
         >
           Sell
         </button>
       </div>
+      {isV4 && (
+        <div className="trade-tabs trade-currency-tabs">
+          <button
+            type="button"
+            className={currency === "hoodie" ? "is-active" : ""}
+            disabled={busy}
+            onClick={() => {
+              setCurrency("hoodie");
+              resetQuote();
+            }}
+          >
+            {side === "buy" ? "Pay HOODIE" : "Receive HOODIE"}
+          </button>
+          <button
+            type="button"
+            className={currency === "eth" ? "is-active" : ""}
+            disabled={busy}
+            onClick={() => {
+              setCurrency("eth");
+              resetQuote();
+            }}
+          >
+            {side === "buy" ? "Pay ETH" : "Receive ETH"}
+          </button>
+        </div>
+      )}
       <label>
         <span>You pay</span>
         <div>
@@ -225,9 +276,7 @@ export function SwapPanel({
             disabled={busy}
             onChange={(event) => {
               setAmount(event.target.value.replace(/[^0-9.]/g, ""));
-              setPrepared(null);
-              setQuoteError("");
-              setSuggestedMaximum("");
+              resetQuote();
             }}
           />
           <strong>{inputSymbol}</strong>
@@ -267,9 +316,7 @@ export function SwapPanel({
             disabled={busy}
             onChange={(event) => {
               setSlippageBps(Number(event.target.value));
-              setPrepared(null);
-              setQuoteError("");
-              setSuggestedMaximum("");
+              resetQuote();
             }}
           >
             <option value={50}>0.5%</option>
@@ -287,9 +334,7 @@ export function SwapPanel({
           disabled={busy}
           onClick={() => {
             setAmount(suggestedMaximum);
-            setPrepared(null);
-            setQuoteError("");
-            setSuggestedMaximum("");
+            resetQuote();
           }}
         >
           Use suggested maximum: {displayAmount(suggestedMaximum)} {inputSymbol}
@@ -321,11 +366,12 @@ export function SwapPanel({
               : `Swap ${inputSymbol} for ${outputSymbol}`}
       </button>
       <p className="trade-warning">
-        Quotes come from the canonical Uniswap V3 Quoter. The exact-amount approval and direct
-        SwapRouter02 transaction are always confirmed in MetaMask.
+        {isV4
+          ? "Quotes come from the canonical Uniswap V4 Quoter. Exact-amount approvals and the direct Universal Router transaction are always simulated first and confirmed in MetaMask."
+          : "Quotes come from the canonical Uniswap V3 Quoter. The exact-amount approval and direct SwapRouter02 transaction are always confirmed in MetaMask."}
       </p>
       <a className="external-trade-link" href={poolUrl} target="_blank" rel="noreferrer">
-        Open the same pool on Uniswap ↗
+        {isV4 ? "View the pool on Uniswap ↗" : "Open the same pool on Uniswap ↗"}
       </a>
     </aside>
   );

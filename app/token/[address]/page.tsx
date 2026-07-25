@@ -8,6 +8,7 @@ import { SwapPanel } from "../../components/SwapPanel";
 import { type HoodiePadMarket } from "../../lib/market";
 import { readVersionedHoodiePadMarket } from "../../lib/market-v4";
 import { PUBLIC_V4_MARKET_VERSION } from "../../lib/market-version";
+import { isV4CalibrationApproved } from "../../lib/v4-calibration";
 
 export const revalidate = 0;
 
@@ -75,10 +76,13 @@ export default async function TokenPage({
       : "";
   const explorerToken = `${product.network.explorerUrl}/token/${market.address}`;
   const isV4 = market.version === PUBLIC_V4_MARKET_VERSION;
-  const explorerPool = isV4
-    ? `${product.network.explorerUrl}/search?q=${market.pool}`
-    : `${product.network.explorerUrl}/address/${market.pool}`;
   const uniswapPool = `https://app.uniswap.org/explore/pools/robinhood/${market.pool}`;
+  // A V4 PoolId is a hash inside the PoolManager singleton, not an address —
+  // Blockscout cannot resolve it, so link the Uniswap pool page instead.
+  const explorerPool = isV4
+    ? uniswapPool
+    : `${product.network.explorerUrl}/address/${market.pool}`;
+  const v4TradingEnabled = isV4 && isV4CalibrationApproved();
 
   return (
     <AppShell>
@@ -144,12 +148,13 @@ export default async function TokenPage({
             <div>
               <strong>The pool is funded and ready; it has not traded yet.</strong>
               <p>
-                Token search and market indexers may not discover a new pool until its first
-                swap. Use the canonical pool link for the first trade.
+                Buy directly on this page — the in-app swap targets the canonical
+                V4 pool. External indexers (including the Uniswap interface) may
+                not route a brand-new pool until it has traded.
               </p>
             </div>
             <a href={uniswapPool} target="_blank" rel="noreferrer">
-              Open canonical pool ↗
+              View pool on Uniswap ↗
             </a>
           </div>
         )}
@@ -204,6 +209,7 @@ export default async function TokenPage({
             symbol={market.symbol}
             poolUrl={uniswapPool}
             marketVersion={market.version}
+            tradingEnabled={v4TradingEnabled}
           />
         ) : (
           <aside className="trade-panel">
