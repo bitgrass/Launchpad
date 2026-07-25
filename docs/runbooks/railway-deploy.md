@@ -132,7 +132,34 @@ Then complete these checks:
     `docs/runbooks/mainnet-v4-canary.md` before any V4 mainnet canary. Do not
     reuse the V1 canary as V4 evidence.
 
-## 5. Rollback and operations
+## 5. Custom domain (Cloudflare)
+
+Order matters: add the domain in Railway first, then point DNS, then widen the
+trusted-host allowlist.
+
+1. Railway service → Settings → Networking → Public Networking →
+   **+ Custom Domain** → enter the apex domain (for example `hoodiepad.fun`).
+   Add `www.<domain>` as a second custom domain if it should also serve the
+   app. Railway displays the exact CNAME target value to use.
+2. Cloudflare → the domain → DNS → Records:
+   - `CNAME` `@` → the target Railway displayed (Cloudflare flattens the
+     apex CNAME automatically). Proxied (orange cloud) is fine.
+   - `CNAME` `www` → same target (only if added in Railway), or use a
+     Cloudflare redirect rule from `www` to the apex instead.
+3. Cloudflare → SSL/TLS → Overview → set encryption mode to **Full (strict)**.
+   The default "Flexible" mode causes redirect loops against Railway, which
+   terminates TLS with its own Let's Encrypt certificate.
+4. Railway → Variables → `VINEXT_TRUSTED_HOSTS`: the production server
+   rejects any Host header not in this comma-separated, exact-match list, so
+   every serving hostname must be listed explicitly:
+   `hoodiepad.fun,www.hoodiepad.fun,${{RAILWAY_PUBLIC_DOMAIN}}`.
+   Apply the variable change so the service redeploys.
+5. Wait for Railway's domain status to show the certificate as issued, then
+   verify `https://<domain>/api/health` returns `{"status":"ok", ...}` and
+   the home page renders. Previously minted token URIs keep resolving on the
+   Railway domain; both hostnames serve the same storage.
+
+## 6. Rollback and operations
 
 - Turn off launch preparation immediately by setting
   `HOODIEPAD_BROADCAST_ENABLED=false`.
