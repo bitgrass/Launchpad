@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "./WalletProvider";
 
 type WalletTransaction = {
@@ -33,6 +33,18 @@ type SwapErrorPayload = {
   inputSymbol?: string;
 };
 
+type SwapContext = {
+  ethUsd: number | null;
+  hoodieUsd: number | null;
+  balances: { eth: string; hoodie: string; token: string } | null;
+};
+
+type CounterCurrency = "hoodie" | "eth";
+
+const APPROVAL_ROUNDS_LIMIT = 3;
+// Keep a little ETH aside for gas when using the MAX chip on native balances.
+const ETH_GAS_RESERVE_WEI = 500_000_000_000_000n;
+
 function displayAmount(value: string) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return value;
@@ -41,7 +53,67 @@ function displayAmount(value: string) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 8 }).format(numeric);
 }
 
-const APPROVAL_ROUNDS_LIMIT = 3;
+function formatBalance(raw: string | undefined) {
+  if (raw === undefined) return "—";
+  try {
+    const value = Number(raw) / 1e18;
+    if (!Number.isFinite(value)) return "—";
+    if (value === 0) return "0";
+    if (value < 0.0001) return "<0.0001";
+    return new Intl.NumberFormat("en-US", {
+      notation: value >= 1_000_000 ? "compact" : "standard",
+      maximumFractionDigits: value >= 1 ? 4 : 6,
+    }).format(value);
+  } catch {
+    return "—";
+  }
+}
+
+function formatUsd(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "";
+  if (value === 0) return "$0";
+  if (value < 0.01) return "<$0.01";
+  return `$${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(value)}`;
+}
+
+function weiToDecimalString(raw: bigint) {
+  const whole = raw / 10n ** 18n;
+  const fraction = (raw % 10n ** 18n).toString().padStart(18, "0").replace(/0+$/, "");
+  return fraction.length > 0 ? `${whole.toString()}.${fraction}` : whole.toString();
+}
+
+function TokenLogo({
+  kind,
+  imageUrl,
+  symbol,
+}: {
+  kind: "token" | "hoodie" | "eth";
+  imageUrl?: string;
+  symbol: string;
+}) {
+  if (kind === "eth") {
+    return (
+      <span className="token-chip-logo is-eth" aria-hidden="true">Ξ</span>
+    );
+  }
+  const url = kind === "hoodie" ? "/hoodie-logo.jpg" : imageUrl;
+  if (url) {
+    return (
+      <span
+        className="token-chip-logo"
+        aria-hidden="true"
+        style={{ backgroundImage: `url("${url.replaceAll('"', "%22")}")` }}
+      />
+    );
+  }
+  return (
+    <span className="token-chip-logo" aria-hidden="true">
+      {symbol.slice(0, 2)}
+    </span>
+  );
+}
 
 export function SwapPanel({
   token,
@@ -49,17 +121,21 @@ export function SwapPanel({
   poolUrl,
   marketVersion = "doppler-lockable-v3-v1",
   tradingEnabled = true,
+  imageUrl,
+  spotPrice,
 }: {
   token: string;
   symbol: string;
   poolUrl: string;
   marketVersion?: "doppler-lockable-v3-v1" | "doppler-multicurve-v4-v2";
   tradingEnabled?: boolean;
+  imageUrl?: string;
+  spotPrice?: string;
 }) {
   const { address, connect, sendTransaction, waitForTransaction } = useWallet();
   const isV4 = marketVersion === "doppler-multicurve-v4-v2";
   const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [currency, setCurrency] = useState<"hoodie" | "eth">("hoodie");
+  const [counter, setCounter] = useState<CounterCurrency>("hoodie");
   const [amount, setAmount] = useState("");
   const [slippageBps, setSlippageBps] = useState(100);
   const [prepared, setPrepared] = useState<PreparedSwap | null>(null);
@@ -68,6 +144,40 @@ export function SwapPanel({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [transactionHash, setTransactionHash] = useState("");
+  const [context, setContext] = useState<SwapContext | null>(null);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const selectorRef = useRef<HTMLDivElement | null>(null);
+
+  const refreshContext = useCallback(async () => {
+    if (!isV4) return;
+    const query = new URLSearchParams({ token });
+    if (address) query.set("account", address);
+    const response = await fetch(`/api/swap/context?${query}`, {
+      cache: "no-store",
+    }).catch(() => null);
+    if (!response?.ok) return;
+    const payload = await response.json() as SwapContext;
+    setContext(payload);
+  }, [address, isV4, token]);
+
+  useEffect(() => {
+    const initial = window.setTimeout(refreshContext, 0);
+    const interval = window.setInterval(refreshContext, 45_000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, [refreshContext]);
+
+  useEffect(() => {
+    function onPointerDown(event: PointerEvent) {
+      if (!selectorRef.current?.contains(event.target as Node)) {
+        setSelectorOpen(false);
+      }
+    }
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, []);
 
   const prepare = useCallback(async (): Promise<PreparedSwap> => {
     const response = await fetch("/api/swap/prepare", {
@@ -79,7 +189,7 @@ export function SwapPanel({
         side,
         amount,
         slippageBps,
-        ...(isV4 ? { currency } : {}),
+        ...(isV4 ? { currency: counter } : {}),
       }),
     });
     const payload = await response.json() as PreparedSwap & SwapErrorPayload;
@@ -93,7 +203,7 @@ export function SwapPanel({
       throw quoteFailure;
     }
     return payload;
-  }, [address, amount, currency, isV4, side, slippageBps, token]);
+  }, [address, amount, counter, isV4, side, slippageBps, token]);
 
   useEffect(() => {
     if (!address || !amount || Number(amount) <= 0) return;
@@ -171,6 +281,7 @@ export function SwapPanel({
       await waitForTransaction(hash);
       setProgress("Swap confirmed");
       setAmount("");
+      await refreshContext();
       window.setTimeout(() => window.location.reload(), 1_500);
     } catch (error) {
       setQuoteError(error instanceof Error ? error.message : "Swap failed");
@@ -185,7 +296,7 @@ export function SwapPanel({
     }
   }
 
-  const counterSymbol = isV4 && currency === "eth" ? "ETH" : "HOODIE";
+  const counterSymbol = isV4 && counter === "eth" ? "ETH" : "HOODIE";
   const inputSymbol = side === "buy" ? counterSymbol : symbol;
   const outputSymbol = side === "buy" ? symbol : counterSymbol;
 
@@ -211,11 +322,98 @@ export function SwapPanel({
     );
   }
 
-  return (
-    <aside className="trade-panel">
-      <span className="preview-label">
-        {isV4 ? "TRADE CANONICAL V4 POOL" : "TRADE CANONICAL POOL"}
-      </span>
+  const spot = spotPrice ? Number(spotPrice.replaceAll(",", "")) : NaN;
+  const counterUsd = counter === "eth" ? context?.ethUsd ?? null : context?.hoodieUsd ?? null;
+  const tokenUsd =
+    context?.hoodieUsd != null && Number.isFinite(spot) && spot > 0
+      ? spot * context.hoodieUsd
+      : null;
+  const payUsdPrice = side === "buy" ? counterUsd : tokenUsd;
+  const receiveUsdPrice = side === "buy" ? tokenUsd : counterUsd;
+  const amountNumber = Number(amount);
+  const payUsd =
+    payUsdPrice !== null && Number.isFinite(amountNumber) && amountNumber > 0
+      ? formatUsd(amountNumber * payUsdPrice)
+      : "";
+  const receiveNumber = prepared ? Number(prepared.amountOutFormatted) : NaN;
+  const receiveUsd =
+    receiveUsdPrice !== null && Number.isFinite(receiveNumber) && receiveNumber > 0
+      ? formatUsd(receiveNumber * receiveUsdPrice)
+      : "";
+  const payBalanceRaw = side === "buy"
+    ? (counter === "eth" ? context?.balances?.eth : context?.balances?.hoodie)
+    : context?.balances?.token;
+  const receiveBalanceRaw = side === "buy"
+    ? context?.balances?.token
+    : (counter === "eth" ? context?.balances?.eth : context?.balances?.hoodie);
+
+  function applyPercent(percent: number) {
+    if (!payBalanceRaw) return;
+    try {
+      let raw = BigInt(payBalanceRaw) * BigInt(percent) / 100n;
+      const payIsEth = side === "buy" && counter === "eth";
+      if (payIsEth && percent === 100) {
+        raw = raw > ETH_GAS_RESERVE_WEI ? raw - ETH_GAS_RESERVE_WEI : 0n;
+      }
+      if (raw <= 0n) return;
+      setAmount(weiToDecimalString(raw));
+      resetQuote();
+    } catch {
+      // Ignore malformed balances; the chip simply does nothing.
+    }
+  }
+
+  const counterChip = (
+    <div className="token-chip" ref={selectorRef}>
+      <button
+        type="button"
+        className="token-chip-button"
+        disabled={busy}
+        onClick={() => setSelectorOpen((open) => !open)}
+        aria-haspopup="listbox"
+        aria-expanded={selectorOpen}
+      >
+        <TokenLogo kind={counter === "eth" ? "eth" : "hoodie"} symbol={counterSymbol} />
+        {counterSymbol}
+        <span className="token-chip-caret" aria-hidden="true">▾</span>
+      </button>
+      {selectorOpen && (
+        <div className="token-chip-menu" role="listbox">
+          {(["hoodie", "eth"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="option"
+              aria-selected={counter === option}
+              className={counter === option ? "is-selected" : ""}
+              onClick={() => {
+                setCounter(option);
+                setSelectorOpen(false);
+                resetQuote();
+              }}
+            >
+              <TokenLogo
+                kind={option === "eth" ? "eth" : "hoodie"}
+                symbol={option === "eth" ? "ETH" : "HOODIE"}
+              />
+              {option === "eth" ? "ETH" : "HOODIE"}
+              <small>{option === "eth" ? "Robinhood native" : "Canonical pair"}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const tokenChip = (
+    <span className="token-chip-button is-static">
+      <TokenLogo kind="token" imageUrl={imageUrl} symbol={symbol} />
+      {symbol}
+    </span>
+  );
+
+  const legacyBody = (
+    <>
       <div className="trade-tabs">
         <button
           type="button"
@@ -240,32 +438,6 @@ export function SwapPanel({
           Sell
         </button>
       </div>
-      {isV4 && (
-        <div className="trade-tabs trade-currency-tabs">
-          <button
-            type="button"
-            className={currency === "hoodie" ? "is-active" : ""}
-            disabled={busy}
-            onClick={() => {
-              setCurrency("hoodie");
-              resetQuote();
-            }}
-          >
-            {side === "buy" ? "Pay HOODIE" : "Receive HOODIE"}
-          </button>
-          <button
-            type="button"
-            className={currency === "eth" ? "is-active" : ""}
-            disabled={busy}
-            onClick={() => {
-              setCurrency("eth");
-              resetQuote();
-            }}
-          >
-            {side === "buy" ? "Pay ETH" : "Receive ETH"}
-          </button>
-        </div>
-      )}
       <label>
         <span>You pay</span>
         <div>
@@ -294,14 +466,101 @@ export function SwapPanel({
           <strong>{outputSymbol}</strong>
         </div>
       </label>
+    </>
+  );
+
+  const v4Body = (
+    <>
+      <div className="swap-box">
+        <div className="swap-box-head">
+          <span>You pay{side === "sell" ? ` · ${symbol}` : ""}</span>
+          <span>{payUsd}</span>
+        </div>
+        <div className="swap-box-main">
+          <input
+            inputMode="decimal"
+            placeholder="0.0"
+            value={amount}
+            disabled={busy}
+            onChange={(event) => {
+              setAmount(event.target.value.replace(/[^0-9.]/g, ""));
+              resetQuote();
+            }}
+          />
+          {side === "buy" ? counterChip : tokenChip}
+        </div>
+        <div className="swap-box-foot">
+          <span>
+            {address && payBalanceRaw !== undefined
+              ? `Balance: ${formatBalance(payBalanceRaw)}`
+              : ""}
+          </span>
+          {address && payBalanceRaw !== undefined && (
+            <span className="pct-chips">
+              {[25, 50, 75, 100].map((percent) => (
+                <button
+                  key={percent}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => applyPercent(percent)}
+                >
+                  {percent === 100 ? "MAX" : `${percent}%`}
+                </button>
+              ))}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="swap-flip">
+        <button
+          type="button"
+          aria-label={side === "buy" ? `Switch to selling ${symbol}` : `Switch to buying ${symbol}`}
+          disabled={busy}
+          onClick={() => {
+            setSide((current) => (current === "buy" ? "sell" : "buy"));
+            setAmount("");
+            setSelectorOpen(false);
+            resetQuote();
+          }}
+        >
+          ↑↓
+        </button>
+      </div>
+      <div className="swap-box">
+        <div className="swap-box-head">
+          <span>You receive, estimated{side === "buy" ? ` · ${symbol}` : ""}</span>
+          <span>{receiveUsd}</span>
+        </div>
+        <div className="swap-box-main">
+          <input
+            readOnly
+            value={prepared ? displayAmount(prepared.amountOutFormatted) : ""}
+            placeholder="0.0"
+          />
+          {side === "buy" ? tokenChip : counterChip}
+        </div>
+        <div className="swap-box-foot">
+          <span>
+            {address && receiveBalanceRaw !== undefined
+              ? `Balance: ${formatBalance(receiveBalanceRaw)}`
+              : ""}
+          </span>
+          <span />
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <aside className="trade-panel">
+      <span className="preview-label">
+        {isV4 ? "TRADE CANONICAL V4 POOL" : "TRADE CANONICAL POOL"}
+      </span>
+      {isV4 ? v4Body : legacyBody}
       <div className="trade-details">
         <span>Minimum received</span>
         <strong>
           {prepared ? `${displayAmount(prepared.minimumOutFormatted)} ${outputSymbol}` : "—"}
-        </strong>
-        <span>Input balance</span>
-        <strong>
-          {prepared ? `${displayAmount(prepared.inputBalanceFormatted)} ${inputSymbol}` : "—"}
         </strong>
         <span>Estimated execution impact</span>
         <strong>

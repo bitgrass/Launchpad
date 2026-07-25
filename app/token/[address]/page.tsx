@@ -210,6 +210,8 @@ export default async function TokenPage({
             poolUrl={uniswapPool}
             marketVersion={market.version}
             tradingEnabled={v4TradingEnabled}
+            imageUrl={market.imageUrl}
+            spotPrice={market.hoodiePerToken}
           />
         ) : (
           <aside className="trade-panel">

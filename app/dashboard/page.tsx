@@ -1,5 +1,6 @@
 import { AppShell } from "../components/AppShell";
 import { DashboardMarkets } from "../components/DashboardMarkets";
+import { FeeClaims } from "../components/FeeClaims";
 import {
   readHoodiePadLaunches,
   summarizeHoodiePadLaunches,
@@ -16,8 +17,9 @@ export default async function DashboardPage() {
       <section className="page-hero section-frame compact-hero">
         <p className="eyebrow"><span /> Creator command center</p>
         <h1>Your hood, your markets.</h1>
-        <p>Connect the fee-recipient wallet used at launch to see its real onchain markets.</p>
+        <p>Connect the fee-recipient wallet used at launch to see its real onchain markets and claim accrued pool fees.</p>
       </section>
+      <FeeClaims />
       <DashboardMarkets markets={markets} />
     </AppShell>
   );

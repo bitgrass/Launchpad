@@ -79,6 +79,14 @@ export const robinhood = defineChain({
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [product.network.rpcUrl] } },
   blockExplorers: { default: { name: "Blockscout", url: product.network.explorerUrl } },
+  contracts: {
+    // Canonical Multicall3 deployment, verified live on Robinhood Chain.
+    // Required by the Doppler SDK's pending-fee previews and used by viem
+    // for read batching.
+    multicall3: {
+      address: "0xcA11bde05977b3631167028862bE2a173976CA11",
+    },
+  },
 });
 
 function asAddress(value: string) {
