@@ -3,6 +3,7 @@ import {
   createWalletClient,
   defineChain,
   encodeFunctionData,
+  fallback,
   http,
   keccak256,
   parseAbi,
@@ -113,7 +114,18 @@ export function createRobinhoodPublicClient(
 ) {
   const url = getRobinhoodRpcUrl(options);
   if (!url) throw new Error("Robinhood RPC is not configured");
-  return createPublicClient({ chain: robinhood, transport: http(url, { timeout: 12_000 }) });
+  const publicUrl = product.network.rpcUrl?.trim();
+  // Runtime failover: when the configured RPC (for example Alchemy) errors or
+  // rate-limits, reads retry against the pinned public Robinhood RPC. This is
+  // distinct from the configuration fallback above — an explicitly configured
+  // endpoint stays primary and launch gating still fails closed without one.
+  const transport = publicUrl && publicUrl.toLowerCase() !== url.toLowerCase()
+    ? fallback([
+        http(url, { timeout: 12_000 }),
+        http(publicUrl, { timeout: 12_000 }),
+      ])
+    : http(url, { timeout: 12_000 });
+  return createPublicClient({ chain: robinhood, transport });
 }
 
 function safeError(error: unknown) {
