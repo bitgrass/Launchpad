@@ -104,7 +104,7 @@ export default async function Home() {
             <span className="step-number">01</span>
             <div className="step-icon">✎</div>
             <h3>Make the token</h3>
-            <p>Add a name, ticker, and artwork file. A description and links are optional. Your connected MetaMask account receives the creator fees.</p>
+            <p>Add a name, ticker, and artwork file. A description and links are optional. Your connected wallet receives the creator fees.</p>
           </article>
           <article>
             <span className="step-number">02</span>

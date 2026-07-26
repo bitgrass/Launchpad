@@ -134,7 +134,7 @@ export function LaunchWizard() {
   const [draft, setDraft] = useState(initialDraft);
   const [artwork, setArtwork] = useState<File | null>(null);
   const [artworkError, setArtworkError] = useState("");
-  const [agreed, setAgreed] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [status, setStatus] = useState<
     "idle" | "uploading" | "preparing" | "deploying" | "confirming" | "deployed" | "error"
   >("idle");
@@ -144,6 +144,10 @@ export function LaunchWizard() {
   const [transactionHash, setTransactionHash] = useState("");
   const [confirmedDeployment, setConfirmedDeployment] = useState<ConfirmedDeployment | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+
+  const busy =
+    status === "uploading" || status === "preparing" ||
+    status === "deploying" || status === "confirming" || status === "deployed";
 
   const artworkPreview = useMemo(() => (artwork ? URL.createObjectURL(artwork) : ""), [artwork]);
   useEffect(() => () => {
@@ -161,6 +165,7 @@ export function LaunchWizard() {
 
   function update<K extends keyof Draft>(key: K, value: Draft[K]) {
     setPrepared(null);
+    setUploadedArtwork(null);
     setPreparedWallet("");
     setTransactionHash("");
     setConfirmedDeployment(null);
@@ -224,46 +229,53 @@ export function LaunchWizard() {
     return (await response.json()) as PreparedLaunch;
   }
 
-  async function prepareLaunch(event: FormEvent) {
-    event.preventDefault();
-    if (!validMetadata || !validWallet || !agreed) return;
-    setPrepared(null);
-    setPreparedWallet("");
+  // One action: upload artwork, prepare and simulate server-side, then hand
+  // the exact transaction to the wallet. The simulation is never a separate
+  // user step — it is what produces the calldata the wallet signs.
+  async function launchToken(event?: FormEvent) {
+    event?.preventDefault();
+    if (!validMetadata || !validWallet || busy) return;
+    setErrorMessage("");
     setTransactionHash("");
     setConfirmedDeployment(null);
-    setErrorMessage("");
     setStatus("uploading");
     try {
-      const uploaded = await uploadArtwork();
+      const uploaded = uploadedArtwork ?? await uploadArtwork();
       setUploadedArtwork(uploaded);
       setStatus("preparing");
-      setPrepared(await requestPrepare(uploaded));
+      const fresh = await requestPrepare(uploaded);
+      setPrepared(fresh);
       setPreparedWallet(address);
+      if (!fresh.productionReady || !fresh.deployment) {
+        throw new Error(
+          fresh.blockers[0] ?? "This launch is not deployable right now.",
+        );
+      }
       setStatus("idle");
+      setConfirmOpen(true);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Could not upload the artwork or prepare this launch. Try again.",
+          : "Could not prepare this launch. Try again.",
       );
       setStatus("error");
     }
   }
 
-  async function deployLaunch() {
-    if (!prepared?.productionReady || !prepared.deployment || preparedWallet !== address) return;
+  async function confirmLaunch() {
+    if (!prepared?.deployment || preparedWallet !== address) return;
     setErrorMessage("");
     setStatus("deploying");
     // Re-simulate immediately before signing so the curve ticks, max-wallet
-    // window, and validity always reflect the current chain state rather than
-    // the state at review time.
+    // window, and validity always reflect current chain state.
     let deployable = prepared;
     try {
       if (!uploadedArtwork) throw new Error("Prepare the launch again first.");
       const fresh = await requestPrepare(uploadedArtwork);
       if (!fresh.productionReady || !fresh.deployment) {
         throw new Error(
-          fresh.blockers[0] ?? "The launch is no longer deployable. Prepare it again.",
+          fresh.blockers[0] ?? "This launch is no longer deployable.",
         );
       }
       deployable = fresh;
@@ -272,15 +284,8 @@ export function LaunchWizard() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Could not refresh the launch simulation. Try again.",
+          : "Could not refresh the launch. Try again.",
       );
-      setStatus("error");
-      return;
-    }
-    if (Date.now() >= new Date(deployable.deployment!.validUntil).getTime()) {
-      setErrorMessage("This deployment preview expired. Prepare a fresh simulation before signing.");
-      setPrepared(null);
-      setPreparedWallet("");
       setStatus("error");
       return;
     }
@@ -309,7 +314,7 @@ export function LaunchWizard() {
         );
         setStatus("deployed");
       } else {
-        setErrorMessage("MetaMask did not submit the deployment. Review the transaction and try again.");
+        setErrorMessage("The wallet did not submit the launch. Review the transaction and try again.");
         setStatus("error");
       }
     }
@@ -338,7 +343,7 @@ export function LaunchWizard() {
         </div>
       </aside>
 
-      <form className="launch-form" onSubmit={prepareLaunch}>
+      <form className="launch-form" onSubmit={launchToken}>
         {step === 1 && (
           <div className="form-step">
             <p className="step-kicker">Step 1 of 3</p>
@@ -389,23 +394,23 @@ export function LaunchWizard() {
           <div className="form-step">
             <p className="step-kicker">Step 2 of 3</p>
             <h2>Your wallet gets the 80%.</h2>
-            <p className="form-intro">The connected MetaMask account automatically becomes the immutable creator fee recipient. It cannot be replaced with a different address in this launch.</p>
+            <p className="form-intro">The connected account automatically becomes the immutable creator fee recipient. It cannot be replaced with a different address in this launch.</p>
             {validWallet ? (
               <div className="creator-wallet-card">
-                <span className="wallet-fox" aria-hidden="true">M</span>
-                <div><small>Connected MetaMask · creator fee recipient</small><code>{address}</code></div>
+                <span className="wallet-fox" aria-hidden="true">◉</span>
+                <div><small>Connected wallet · creator fee recipient</small><code>{address}</code></div>
                 <strong>80%</strong>
               </div>
             ) : (
               <div className="wallet-connect-panel">
-                <strong>Connect MetaMask to continue</strong>
-                <p>HoodiePad will switch MetaMask to Robinhood Chain and use that account as the creator beneficiary.</p>
+                <strong>Connect a wallet to continue</strong>
+                <p>MetaMask or Phantom. HoodiePad switches it to Robinhood Chain and uses that account as the creator beneficiary.</p>
                 <WalletButton compact />
               </div>
             )}
             <div className={`address-check ${validWallet ? "valid" : ""}`}>
               <span>{validWallet ? "✓" : "!"}</span>
-              <div><strong>{validWallet ? "Creator recipient locked to connected wallet" : "MetaMask connection required"}</strong><p>This account receives 80% of canonical pool fees in both assets.</p></div>
+              <div><strong>{validWallet ? "Creator recipient locked to connected wallet" : "Wallet connection required"}</strong><p>This account receives 80% of canonical pool fees in both assets.</p></div>
             </div>
             <div className="split-preview compact">
               <div><span>Connected creator wallet</span><strong>80%</strong></div>
@@ -423,7 +428,7 @@ export function LaunchWizard() {
         {step === 3 && (
           <div className="form-step review-step">
             <p className="step-kicker">Step 3 of 3</p>
-            <h2>Review before MetaMask asks.</h2>
+            <h2>Launch it.</h2>
             <div className="review-token">
               <div className="review-avatar" style={artworkPreview ? { backgroundImage: `url(${artworkPreview})` } : undefined}>{artworkPreview ? "" : draft.symbol.slice(0, 2)}</div>
               <div><strong>{draft.name}</strong><span>${draft.symbol} · 1,000,000,000 supply</span></div>
@@ -431,74 +436,22 @@ export function LaunchWizard() {
             </div>
             <div className="review-rules">
               <div><span>Network</span><strong>Robinhood Chain</strong></div>
-              <div><span>Market</span><strong>Multicurve V4</strong></div>
               <div><span>Canonical pair</span><strong>${draft.symbol} / HOODIE</strong></div>
-              <div><span>Target opening FDV</span><strong>$30,000</strong></div>
-              <div><span>Creator recipient</span><strong>{shorten(address)}</strong></div>
-              <div><span>Ecosystem Safe</span><strong>{shorten(ecosystemSafe)}</strong></div>
+              <div><span>Opening market cap</span><strong>$30,000</strong></div>
+              <div><span>Market allocation</span><strong>100% · no presale</strong></div>
               <div><span>Trading fee</span><strong>1.00%</strong></div>
-              <div><span>Creator share</span><strong>80%</strong></div>
-              <div><span>Market allocation</span><strong>100%</strong></div>
+              <div><span>Your share of fees</span><strong>80%</strong></div>
+              <div><span>Liquidity</span><strong>Locked · no migration</strong></div>
               <div><span>Max wallet</span><strong>2% for 24h</strong></div>
-              <div><span>Migration</span><strong>None</strong></div>
+              <div><span>Launch fee</span><strong>None · gas only</strong></div>
+              <div><span>Creator recipient</span><strong>{shorten(address)}</strong></div>
             </div>
-            <label className="confirm-check">
-              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
-              <span>I understand the token, pool, fee beneficiaries, and metadata are irreversible after launch.</span>
-            </label>
-            <div className={`simulation-notice${prepared?.productionReady ? " is-ready" : ""}`}>
-              <span>{prepared?.productionReady ? "DEPLOYMENT READY" : "RELEASE GATE"}</span>
-              <p>
-                {prepared?.productionReady
-                  ? "The fork calibration, dependency snapshot, and live simulation passed. MetaMask will show the final mainnet transaction before anything is submitted."
-                  : "HoodiePad V2 is V4-only. Mainnet deployment appears only after the exact SDK, runtime, PoolKey, fork, and review gates pass."}
-              </p>
-            </div>
-            {prepared && preparedWallet === address && (
-              <div className={`prepared-card${prepared.productionReady ? " is-ready" : ""}`} role="status">
-                <div>
-                  <span>{prepared.simulation.status === "simulated" ? "✓" : "i"}</span>
-                  <strong>
-                    {prepared.productionReady
-                      ? "Exact deployment transaction is ready"
-                      : prepared.simulation.status === "simulated"
-                      ? "Live Robinhood simulation completed"
-                      : "Draft prepared; live simulation unavailable"}
-                  </strong>
-                </div>
-                <code>{prepared.checksum}</code>
-                {prepared.chainStatus.available && (
-                  <dl className="prepared-facts">
-                    <div><dt>Block</dt><dd>{prepared.chainStatus.blockNumber}</dd></div>
-                    <div><dt>Market version</dt><dd>Multicurve V4</dd></div>
-                    <div><dt>Predicted token</dt><dd>{prepared.simulation.asset ? shorten(prepared.simulation.asset) : "—"}</dd></div>
-                    <div><dt>Predicted PoolId</dt><dd>{prepared.simulation.pool ? shorten(prepared.simulation.pool) : "—"}</dd></div>
-                    <div><dt>Gas estimate</dt><dd>{prepared.simulation.gasEstimate ?? "—"}</dd></div>
-                    <div><dt>Fork calibration</dt><dd>{prepared.calibration.approved ? `Block ${prepared.calibration.forkBlock}` : prepared.calibration.status}</dd></div>
-                    {prepared.simulation.priceReference && (
-                      <>
-                        <div><dt>ETH/USD ({prepared.simulation.priceReference.ethUsdSource})</dt><dd>${prepared.simulation.priceReference.ethUsd}</dd></div>
-                        <div><dt>HOODIE/USD basis</dt><dd>${Number(prepared.simulation.priceReference.hoodieUsd).toExponential(4)}</dd></div>
-                      </>
-                    )}
-                  </dl>
-                )}
-                <p className="trade-warning">
-                  The exact opening curve is re-simulated against live chain
-                  state at the moment you press deploy; MetaMask always shows
-                  the final transaction.
-                </p>
-                <ul>{prepared.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
-              </div>
-            )}
-            {transactionHash && prepared?.deployment && (
+            {transactionHash && (
               <div className="deployment-success" role="status">
                 <strong>
                   {confirmedDeployment
-                    ? "Deployment confirmed on Robinhood Chain."
-                    : status === "confirming"
-                      ? "Deployment submitted. Waiting for Robinhood confirmation…"
-                      : "Deployment submitted to Robinhood Chain."}
+                    ? "Launch confirmed on Robinhood Chain."
+                    : "Launch submitted. Waiting for confirmation…"}
                 </strong>
                 <a
                   href={`https://robinhoodchain.blockscout.com/tx/${transactionHash}`}
@@ -507,37 +460,27 @@ export function LaunchWizard() {
                 >
                   View transaction
                 </a>
-                <a
-                  href={`/token/${confirmedDeployment?.token ?? prepared.deployment.predictedToken}?tx=${encodeURIComponent(transactionHash)}`}
-                >
-                  Open {confirmedDeployment ? "confirmed" : "predicted"} token page
-                </a>
-                {confirmedDeployment && <span>V4 PoolId {shorten(confirmedDeployment.pool)}</span>}
+                {confirmedDeployment && (
+                  <a href={`/token/${confirmedDeployment.token}?tx=${encodeURIComponent(transactionHash)}`}>
+                    Open token page
+                  </a>
+                )}
               </div>
             )}
             {status === "error" && <p className="form-error">{errorMessage}</p>}
             <div className="form-actions">
               <button className="back-button" type="button" onClick={() => setStep(2)}>← Back</button>
-              {prepared?.productionReady && prepared.deployment ? (
-                <button
-                  className="button button-primary"
-                  type="button"
-                  disabled={status === "deploying" || status === "confirming" || status === "deployed"}
-                  onClick={deployLaunch}
-                >
-                  {status === "deploying"
-                    ? "Confirm in MetaMask"
-                    : status === "confirming"
-                      ? "Confirming on Robinhood"
-                    : status === "deployed"
-                      ? confirmedDeployment ? "Deployment confirmed" : "Deployment submitted"
-                      : "Deploy with MetaMask"} <span>↗</span>
-                </button>
-              ) : (
-                <button className="button button-primary" type="submit" disabled={!agreed || !validWallet || status === "uploading" || status === "preparing"}>
-                {status === "uploading" ? "Uploading artwork…" : status === "preparing" ? "Simulating on Robinhood…" : "Prepare simulation"} <span>↗</span>
-                </button>
-              )}
+              <button
+                className="button button-primary"
+                type="submit"
+                disabled={!validWallet || busy}
+              >
+                {status === "uploading"
+                  ? "Uploading artwork…"
+                  : status === "preparing"
+                    ? "Preparing launch…"
+                    : "Launch token"} <span>↗</span>
+              </button>
             </div>
           </div>
         )}
@@ -553,6 +496,75 @@ export function LaunchWizard() {
         <p>{draft.description || "Your token story will appear here for the hood to inspect."}</p>
         <div className="preview-badges"><span>1B fixed</span><span>80% creator</span><span>No migration</span></div>
       </aside>
+
+      {confirmOpen && prepared?.deployment && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setConfirmOpen(false);
+          }}
+        >
+          <div
+            className="modal-card launch-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Launch ${draft.symbol}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="launch-modal-art">
+              <div
+                className="review-avatar"
+                style={artworkPreview ? { backgroundImage: `url(${artworkPreview})` } : undefined}
+              >
+                {artworkPreview ? "" : draft.symbol.slice(0, 2)}
+              </div>
+            </div>
+            <h2>Launch ${draft.symbol}</h2>
+            <dl className="launch-modal-facts">
+              <div><dt>Token</dt><dd>{draft.name} (${draft.symbol})</dd></div>
+              <div><dt>Supply</dt><dd>1,000,000,000 · 100% to market</dd></div>
+              <div><dt>Opening market cap</dt><dd>$30,000</dd></div>
+              <div><dt>Launch fee</dt><dd>None · network gas only</dd></div>
+              <div><dt>Trading fee split</dt><dd>80% creator / 15% ecosystem / 5% protocol</dd></div>
+              <div><dt>Liquidity</dt><dd>Locked · no migration</dd></div>
+              <div><dt>Creator</dt><dd>{shorten(address)}</dd></div>
+              <div><dt>Network</dt><dd>Robinhood Chain (4663)</dd></div>
+              <div><dt>Token address</dt><dd>{shorten(prepared.deployment.predictedToken)}</dd></div>
+            </dl>
+            {status === "error" && <p className="form-error">{errorMessage}</p>}
+            <div className="launch-modal-actions">
+              <button
+                type="button"
+                className="button button-primary"
+                disabled={busy}
+                onClick={confirmLaunch}
+              >
+                {status === "deploying"
+                  ? "Confirm in your wallet…"
+                  : status === "confirming"
+                    ? "Confirming onchain…"
+                    : status === "deployed"
+                      ? "Launched"
+                      : "Confirm"}
+              </button>
+              <button
+                type="button"
+                className="modal-cancel"
+                disabled={busy}
+                onClick={() => setConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="modal-note">
+              The token, pool, fee beneficiaries, and metadata are irreversible
+              after launch. Your wallet shows the final transaction before
+              anything is submitted.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -82,7 +82,7 @@ function FeeClaimsInner({ address }: { address: string }) {
       if (!response.ok || !payload.transaction) {
         throw new Error(payload.error ?? "Could not prepare the fee claim");
       }
-      setStatus("Confirm the fee collection in MetaMask");
+      setStatus("Confirm the fee collection in your wallet");
       const hash = await sendTransaction(payload.transaction);
       setStatus("Waiting for Robinhood confirmation…");
       await waitForTransaction(hash);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { WalletPicker } from "./WalletButton";
 import { useWallet } from "./WalletProvider";
 
 type WalletTransaction = {
@@ -132,7 +133,8 @@ export function SwapPanel({
   imageUrl?: string;
   spotPrice?: string;
 }) {
-  const { address, connect, sendTransaction, waitForTransaction } = useWallet();
+  const { address, sendTransaction, waitForTransaction } = useWallet();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const isV4 = marketVersion === "doppler-multicurve-v4-v2";
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [counter, setCounter] = useState<CounterCurrency>("hoodie");
@@ -242,7 +244,7 @@ export function SwapPanel({
 
   async function executeSwap() {
     if (!address) {
-      await connect();
+      setPickerOpen(true);
       return;
     }
     if (!amount || Number(amount) <= 0) return;
@@ -274,7 +276,7 @@ export function SwapPanel({
         throw new Error("The swap could not be simulated after approval");
       }
       setPrepared(current);
-      setProgress("Confirm the simulated swap in MetaMask");
+      setProgress("Confirm the simulated swap in your wallet");
       const hash = await sendTransaction(current.swapTransaction);
       setTransactionHash(hash);
       setProgress("Waiting for Robinhood confirmation…");
@@ -626,12 +628,13 @@ export function SwapPanel({
       </button>
       <p className="trade-warning">
         {isV4
-          ? "Quotes come from the canonical Uniswap V4 Quoter. Exact-amount approvals and the direct Universal Router transaction are always simulated first and confirmed in MetaMask."
-          : "Quotes come from the canonical Uniswap V3 Quoter. The exact-amount approval and direct SwapRouter02 transaction are always confirmed in MetaMask."}
+          ? "Quotes come from the canonical Uniswap V4 Quoter. Exact-amount approvals and the direct Universal Router transaction are always simulated first and confirmed in your wallet."
+          : "Quotes come from the canonical Uniswap V3 Quoter. The exact-amount approval and direct SwapRouter02 transaction are always confirmed in your wallet."}
       </p>
       <a className="external-trade-link" href={poolUrl} target="_blank" rel="noreferrer">
         {isV4 ? "View the pool on Uniswap ↗" : "Open the same pool on Uniswap ↗"}
       </a>
+      {pickerOpen && <WalletPicker onClose={() => setPickerOpen(false)} />}
     </aside>
   );
 }
