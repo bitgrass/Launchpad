@@ -156,8 +156,38 @@ export function ExploreMarkets({
     return sortDescending ? " ↓" : " ↑";
   }
 
+  const totalVolumeHoodie = markets.reduce(
+    (sum, market) => sum + market.volumeHoodieNumber,
+    0,
+  );
+  const totalTxns = markets.reduce((sum, market) => sum + market.txns, 0);
+  const totalVolumeUsd = hoodieUsd !== null
+    ? usdCompact(totalVolumeHoodie * hoodieUsd)
+    : null;
+
   return (
     <>
+      <section className="explore-stats section-frame">
+        <article>
+          <span>Total volume</span>
+          <strong>{totalVolumeUsd ?? hoodieCompact(totalVolumeHoodie)}</strong>
+          <small>
+            {totalVolumeUsd
+              ? hoodieCompact(totalVolumeHoodie)
+              : "across all canonical pools"}
+          </small>
+        </article>
+        <article>
+          <span>Tokens launched</span>
+          <strong>{markets.length.toLocaleString("en-US")}</strong>
+          <small>validated onchain markets</small>
+        </article>
+        <article>
+          <span>Total transactions</span>
+          <strong>{totalTxns.toLocaleString("en-US")}</strong>
+          <small>canonical-pool swaps</small>
+        </article>
+      </section>
       <section className="explore-toolbar section-frame">
         <label className="search-field">
           <span aria-hidden="true">⌕</span>
