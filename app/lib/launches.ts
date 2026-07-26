@@ -35,6 +35,9 @@ export type MarketHolder = {
   balanceRaw: string;
   balance: string;
   sharePercent: number;
+  // Set for protocol entries (e.g. the locked canonical pool) so the UI can
+  // name them instead of showing a bare address.
+  label?: string;
 };
 
 export type MarketDailyActivity = {

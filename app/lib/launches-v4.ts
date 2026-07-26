@@ -367,21 +367,36 @@ async function readV4Holders(
     product.contracts.noOpGovernanceFactory.toLowerCase(),
   ]);
   const totalSupply = BigInt(market.totalSupplyRaw);
+  const sharePercent = (balance: bigint) => totalSupply > 0n
+    ? Number(balance * 1_000_000n / totalSupply) / 10_000
+    : 0;
   const walletBalances = [...cache.balances.entries()]
     .filter(([address, balance]) => balance > 0n && !excluded.has(address))
     .sort(([, first], [, second]) =>
       first === second ? 0 : first > second ? -1 : 1,
     );
-  const holders: MarketHolder[] = walletBalances.slice(0, 20).map(
-    ([address, balance]) => ({
+  // The locked canonical pool leads the list as a labeled protocol entry so
+  // readers see where the supply actually sits (Dexscreener-style "pooled").
+  const poolManagerKey = product.contracts.uniswapV4PoolManager.toLowerCase();
+  const poolBalance = cache.balances.get(poolManagerKey) ?? 0n;
+  const poolEntry: MarketHolder[] = poolBalance > 0n
+    ? [{
+        address: getAddress(product.contracts.uniswapV4PoolManager),
+        balanceRaw: poolBalance.toString(),
+        balance: formatHolderBalance(poolBalance, market.decimals),
+        sharePercent: sharePercent(poolBalance),
+        label: "Canonical V4 pool (locked)",
+      }]
+    : [];
+  const holders: MarketHolder[] = [
+    ...poolEntry,
+    ...walletBalances.slice(0, 20).map(([address, balance]) => ({
       address: cache.checksumAddresses.get(address) ?? getAddress(address),
       balanceRaw: balance.toString(),
       balance: formatHolderBalance(balance, market.decimals),
-      sharePercent: totalSupply > 0n
-        ? Number(balance * 1_000_000n / totalSupply) / 10_000
-        : 0,
-    }),
-  );
+      sharePercent: sharePercent(balance),
+    })),
+  ];
   return { holderCount: walletBalances.length, holders };
 }
 

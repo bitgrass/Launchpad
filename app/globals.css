@@ -490,6 +490,14 @@ button { color: inherit; }
 .market-table-name em { font-style: normal; }
 .market-table-name em.is-live { color: #3f7d1e; font-weight: 800; }
 .chart-metrics small { display: block; margin-top: 2px; color: var(--muted); font-size: 8px; }
+.price-row small, .chart-toolbar small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; font-weight: 750; }
+.token-meta-bar { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+.token-meta-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 1.5px solid var(--ink); border-radius: 999px; background: var(--paper); color: inherit; font-size: 10px; font-weight: 850; cursor: pointer; text-decoration: none; box-shadow: 2px 2px 0 var(--ink); }
+a.token-meta-chip:hover, button.token-meta-chip:hover { background: var(--acid-soft); }
+.token-meta-chip.is-stat { cursor: default; background: #eee7d9; box-shadow: none; }
+.token-meta-chip.is-stat strong { font-size: 11px; }
+.token-meta-chip.is-stat small { color: var(--muted); font-size: 8px; }
+.holder-label { display: inline-block; margin-right: 5px; padding: 1px 7px; border: 1px solid var(--ink); border-radius: 999px; background: var(--acid); color: var(--ink); font-size: 8px; font-style: normal; font-weight: 850; }
 .fee-claims-list { display: grid; gap: 12px; }
 .fee-claim-card { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px 16px; border: 2px solid var(--ink); border-radius: 13px; background: var(--paper); box-shadow: 4px 4px 0 var(--ink); }
 .fee-claim-card .token-chip-logo { width: 34px; height: 34px; font-size: 11px; }

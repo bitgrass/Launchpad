@@ -14,7 +14,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
       className={`wallet-button${compact ? " wallet-button-compact" : ""}`}
       onClick={connect}
       type="button"
-      aria-label={address ? `Connected MetaMask wallet ${address}` : "Connect MetaMask wallet"}
+      aria-label={address ? `Connected wallet ${address}` : "Connect wallet"}
     >
       <span className={`wallet-dot ${address ? "is-live" : ""}`} />
       {address
@@ -23,7 +23,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
           ? "Connecting…"
           : status === "error"
             ? "Install / retry MetaMask"
-            : "Connect MetaMask"}
+            : "Connect"}
     </button>
   );
 }

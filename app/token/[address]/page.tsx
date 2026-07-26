@@ -5,10 +5,37 @@ import { AppShell } from "../../components/AppShell";
 import { MarketActivity } from "../../components/MarketActivity";
 import { MarketChart } from "../../components/MarketChart";
 import { SwapPanel } from "../../components/SwapPanel";
+import { TokenMetaBar } from "../../components/TokenMetaBar";
+import { readDisplayPrices } from "../../lib/display-prices";
+import { type MarketAnalytics } from "../../lib/launches";
 import { type HoodiePadMarket } from "../../lib/market";
 import { readVersionedHoodiePadMarket } from "../../lib/market-v4";
 import { PUBLIC_V4_MARKET_VERSION } from "../../lib/market-version";
 import { isV4CalibrationApproved } from "../../lib/v4-calibration";
+
+function formatUsdCompact(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return null;
+  if (value === 0) return "$0";
+  if (value < 0.01) return "<$0.01";
+  return `$${new Intl.NumberFormat("en-US", {
+    notation: value >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: 2,
+  }).format(value)}`;
+}
+
+function formatUsdTinyPrice(value: number | null) {
+  if (value === null || !Number.isFinite(value) || value <= 0) return null;
+  if (value >= 0.01) {
+    return `$${new Intl.NumberFormat("en-US", {
+      maximumFractionDigits: 4,
+    }).format(value)}`;
+  }
+  return `$${value.toLocaleString("en-US", {
+    maximumSignificantDigits: 3,
+    useGrouping: false,
+    maximumFractionDigits: 12,
+  })}`;
+}
 
 export const revalidate = 0;
 
@@ -84,6 +111,30 @@ export default async function TokenPage({
     : `${product.network.explorerUrl}/address/${market.pool}`;
   const v4TradingEnabled = isV4 && isV4CalibrationApproved();
 
+  // Display-only USD context for the price row and identity stats.
+  const prices = await readDisplayPrices().catch(
+    () => ({ ethUsd: null, hoodieUsd: null }),
+  );
+  const spotHoodie = market.hoodiePerToken === "Unavailable"
+    ? null
+    : Number(market.hoodiePerToken.replaceAll(",", ""));
+  const priceUsd = prices.hoodieUsd !== null && spotHoodie !== null
+    ? spotHoodie * prices.hoodieUsd
+    : null;
+  const supply = Number(market.totalSupplyRaw) / 1e18;
+  const fdvUsd = priceUsd !== null && Number.isFinite(supply)
+    ? priceUsd * supply
+    : null;
+  const priceUsdLabel = formatUsdTinyPrice(priceUsd);
+  const fdvUsdLabel = formatUsdCompact(fdvUsd);
+  const analytics = (market as HoodiePadMarket & { analytics?: MarketAnalytics }).analytics;
+  const volumeHoodieNumber = analytics
+    ? Number(analytics.hoodieVolumeRaw) / 1e18
+    : null;
+  const volumeUsdLabel = analytics && prices.hoodieUsd !== null && volumeHoodieNumber !== null
+    ? formatUsdCompact(volumeHoodieNumber * prices.hoodieUsd) ?? undefined
+    : undefined;
+
   return (
     <AppShell>
       <section className="token-head section-frame">
@@ -158,13 +209,21 @@ export default async function TokenPage({
             </a>
           </div>
         )}
+        <TokenMetaBar
+          address={market.address}
+          dexscreenerUrl={isV4
+            ? `https://dexscreener.com/robinhood/${market.pool}`
+            : undefined}
+          websiteUrl={market.websiteUrl}
+          xUrl={market.xUrl}
+          telegramUrl={market.telegramUrl}
+          holderCount={analytics?.holderCount}
+          volumeUsd={volumeUsdLabel}
+          volumeHoodie={analytics
+            ? `${analytics.hoodieVolume} HOODIE`
+            : undefined}
+        />
         {market.description && <p className="token-description">{market.description}</p>}
-        {(market.websiteUrl || market.xUrl) && (
-          <div className="token-links">
-            {market.websiteUrl && <a href={market.websiteUrl} target="_blank" rel="noreferrer">Website ↗</a>}
-            {market.xUrl && <a href={market.xUrl} target="_blank" rel="noreferrer">X / Twitter ↗</a>}
-          </div>
-        )}
       </section>
 
       <section className="token-layout section-frame">
@@ -172,11 +231,13 @@ export default async function TokenPage({
           <div className="price-row">
             <div>
               <span>Onchain spot price</span>
-              <strong>{market.hoodiePerToken} HOODIE</strong>
+              <strong>{priceUsdLabel ?? `${market.hoodiePerToken} HOODIE`}</strong>
+              {priceUsdLabel && <small>{market.hoodiePerToken} HOODIE</small>}
             </div>
             <div>
               <span>Market cap (FDV)</span>
-              <strong>{market.fdvHoodie} HOODIE</strong>
+              <strong>{fdvUsdLabel ?? `${market.fdvHoodie} HOODIE`}</strong>
+              {fdvUsdLabel && <small>{market.fdvHoodie} HOODIE</small>}
             </div>
             <span className="live-chain-chip">
               {!isV4

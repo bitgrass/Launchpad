@@ -403,6 +403,7 @@ export async function readHoodiePadV4Market(
     imageUrl: metadataImageUrl(metadata),
     websiteUrl: safeHttpUrl(metadata?.external_url),
     xUrl: safeHttpUrl(metadata?.properties?.x_url),
+    telegramUrl: safeHttpUrl(metadata?.properties?.tg_url),
     integrator: getAddress(assetData[9]),
     pool: poolId,
     poolId,

@@ -11,6 +11,7 @@ type Draft = {
   description: string;
   website: string;
   xUrl: string;
+  tgUrl: string;
 };
 
 type PreparedLaunch = {
@@ -77,6 +78,7 @@ const initialDraft: Draft = {
   description: "",
   website: "",
   xUrl: "",
+  tgUrl: "",
 };
 
 const addressPattern = /^0x[a-fA-F0-9]{40}$/;
@@ -374,6 +376,7 @@ export function LaunchWizard() {
             <div className="field-grid two-columns">
               <label><span>Website <em>Optional</em></span><input value={draft.website} onChange={(e) => update("website", e.target.value)} inputMode="url" placeholder="https://" /></label>
               <label><span>X / Twitter <em>Optional</em></span><input value={draft.xUrl} onChange={(e) => update("xUrl", e.target.value)} inputMode="url" placeholder="https://x.com/" /></label>
+              <label><span>Telegram <em>Optional</em></span><input value={draft.tgUrl} onChange={(e) => update("tgUrl", e.target.value)} inputMode="url" placeholder="https://t.me/" /></label>
             </div>
             <div className="form-actions">
               <span>{validMetadata ? "Looking sharp." : "Name, ticker, and artwork required."}</span>

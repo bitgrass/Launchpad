@@ -617,7 +617,7 @@ export function SwapPanel({
         onClick={executeSwap}
       >
         {!address
-          ? "Connect MetaMask"
+          ? "Connect"
           : busy
             ? "Working…"
             : prepared?.approvalTransactions.length

@@ -36,6 +36,7 @@ export type TokenMetadata = {
   external_url?: unknown;
   properties?: {
     x_url?: unknown;
+    tg_url?: unknown;
     launchpad?: unknown;
     chain_id?: unknown;
     canonical_numeraire?: unknown;
@@ -59,6 +60,7 @@ export type HoodiePadMarket = {
   imageUrl?: string;
   websiteUrl?: string;
   xUrl?: string;
+  telegramUrl?: string;
   integrator: Address;
   pool: Hex;
   poolId?: Hex;
@@ -230,6 +232,7 @@ export async function readHoodiePadMarket(
     imageUrl: metadataImageUrl(metadata),
     websiteUrl: safeHttpUrl(metadata?.external_url),
     xUrl: safeHttpUrl(metadata?.properties?.x_url),
+    telegramUrl: safeHttpUrl(metadata?.properties?.tg_url),
     integrator: getAddress(assetData[9]),
     pool,
     initializer: getAddress(product.contracts.lockableV3Initializer),

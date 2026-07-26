@@ -16,6 +16,7 @@ type Holder = {
   address: string;
   balance: string;
   sharePercent: number;
+  label?: string;
 };
 
 type ActivityData = {
@@ -159,7 +160,14 @@ export function MarketActivity({
               key={holder.address}
             >
               <strong>#{index + 1}</strong>
-              <code>{shorten(holder.address)}</code>
+              {holder.label
+                ? (
+                  <code>
+                    <em className="holder-label">{holder.label}</em>
+                    {" "}{shorten(holder.address)}
+                  </code>
+                )
+                : <code>{shorten(holder.address)}</code>}
               <span>{holder.balance} {symbol}</span>
               <span>{holder.sharePercent.toFixed(4)}%</span>
             </a>

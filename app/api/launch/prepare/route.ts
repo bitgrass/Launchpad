@@ -31,6 +31,7 @@ type LaunchDraft = {
   artworkSha256?: unknown;
   website?: unknown;
   xUrl?: unknown;
+  tgUrl?: unknown;
   payoutWallet?: unknown;
 };
 
@@ -109,6 +110,7 @@ async function storeMetadata(request: Request, launch: {
   artworkSha256: string;
   website: string;
   xUrl: string;
+  tgUrl: string;
 }) {
   const metadata = {
     name: launch.name,
@@ -118,6 +120,7 @@ async function storeMetadata(request: Request, launch: {
     external_url: launch.website || undefined,
     properties: {
       x_url: launch.xUrl || undefined,
+      tg_url: launch.tgUrl || undefined,
       artwork_sha256: launch.artworkSha256,
       launchpad: "HoodiePad",
       chain_id: product.network.chainId,
@@ -205,6 +208,7 @@ export async function POST(request: Request) {
     artwork: { key: artworkKey, url: artworkUrl, sha256: artworkSha256 },
     website: typeof body.website === "string" ? body.website.trim() : "",
     xUrl: typeof body.xUrl === "string" ? body.xUrl.trim() : "",
+    tgUrl: typeof body.tgUrl === "string" ? body.tgUrl.trim() : "",
     creatorFeeRecipient: body.payoutWallet,
     ecosystemFeeRecipient: product.contracts.hoodieEcosystemSafe,
     chainId: product.network.chainId,
@@ -234,6 +238,7 @@ export async function POST(request: Request) {
       artworkSha256,
       website: normalized.website,
       xUrl: normalized.xUrl,
+      tgUrl: normalized.tgUrl,
     });
   } catch (error) {
     if (error instanceof ObjectStorageUnavailableError) {

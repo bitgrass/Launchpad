@@ -35,6 +35,22 @@ function usd(value: number | null | undefined) {
   }).format(value)}`;
 }
 
+function tinyUsd(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  if (value >= 0.01) {
+    return `$${new Intl.NumberFormat("en-US", {
+      maximumFractionDigits: 4,
+    }).format(value)}`;
+  }
+  return `$${value.toLocaleString("en-US", {
+    maximumSignificantDigits: 3,
+    useGrouping: false,
+    maximumFractionDigits: 12,
+  })}`;
+}
+
 function chartPath(points: ChartPoint[]) {
   if (points.length === 0) return "";
   const source = points.length === 1
@@ -92,7 +108,12 @@ export function MarketChart({
       <div className="chart-toolbar">
         <div>
           <span>Live canonical-pool price</span>
-          <strong>{data?.currentPrice ?? initialPrice} HOODIE</strong>
+          <strong>
+            {tinyUsd(data?.priceUsd) ?? `${data?.currentPrice ?? initialPrice} HOODIE`}
+          </strong>
+          {tinyUsd(data?.priceUsd) && (
+            <small>{data?.currentPrice ?? initialPrice} HOODIE</small>
+          )}
         </div>
         <div className="chart-live-indicator"><span /> Refreshes every 30s</div>
       </div>
