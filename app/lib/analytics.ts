@@ -1,5 +1,6 @@
 import { formatUnits } from "viem";
 import product from "../../config/hoodiepad-v2.json";
+import { readDisplayPrices } from "./display-prices";
 import {
   readHoodiePadLaunches,
   type HoodiePadLaunch,
@@ -35,6 +36,9 @@ export type ProtocolDailyActivity = {
 export type ProtocolAnalytics = {
   asOf: string;
   source: "Robinhood Chain RPC";
+  // Display-only HOODIE/USD rate for dual-denomination cards; null when the
+  // price sources are unavailable (the UI then shows HOODIE amounts only).
+  hoodieUsd: number | null;
   allTime: ProtocolAnalyticsMetrics;
   rolling24h: ProtocolAnalyticsMetrics;
   daily: ProtocolDailyActivity[];
@@ -103,7 +107,10 @@ function utcDate(timestamp: number) {
 }
 
 export async function readProtocolAnalytics(): Promise<ProtocolAnalytics> {
-  const launches = await readHoodiePadLaunches();
+  const [launches, prices] = await Promise.all([
+    readHoodiePadLaunches(),
+    readDisplayPrices().catch(() => ({ ethUsd: null, hoodieUsd: null })),
+  ]);
   const now = Math.floor(Date.now() / 1000);
   const cutoff24h = now - DAY_SECONDS;
   const recentLaunches = launches.filter(
@@ -154,6 +161,7 @@ export async function readProtocolAnalytics(): Promise<ProtocolAnalytics> {
   return {
     asOf: new Date().toISOString(),
     source: "Robinhood Chain RPC",
+    hoodieUsd: prices.hoodieUsd,
     allTime: makeMetrics(launches, {
       hoodieVolumeRaw: allTimeVolume,
       hoodieFeeVolumeRaw: allTimeFeeVolume,

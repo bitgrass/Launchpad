@@ -7,36 +7,68 @@ import type {
   ProtocolDailyActivity,
 } from "../lib/analytics";
 
-function metricCards(metrics: ProtocolAnalyticsMetrics) {
+function formatUsd(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  if (value === 0) return "$0";
+  if (value < 0.01) return "<$0.01";
+  return `$${new Intl.NumberFormat("en-US", {
+    notation: value >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: 2,
+  }).format(value)}`;
+}
+
+// USD-primary with the exact HOODIE amount beneath; HOODIE-only when the
+// display price is unavailable.
+function dualValue(
+  raw: string,
+  hoodieDisplay: string,
+  hoodieUsd: number | null,
+) {
+  const hoodieAmount = Number(BigInt(raw)) / 1e18;
+  const usd = hoodieUsd !== null && Number.isFinite(hoodieAmount)
+    ? formatUsd(hoodieAmount * hoodieUsd)
+    : null;
+  return usd !== null
+    ? { value: usd, sub: `${hoodieDisplay} HOODIE` }
+    : { value: `${hoodieDisplay} HOODIE`, sub: undefined };
+}
+
+function metricCards(metrics: ProtocolAnalyticsMetrics, hoodieUsd: number | null) {
+  const volume = dualValue(metrics.hoodieVolumeRaw, metrics.hoodieVolume, hoodieUsd);
+  const creator = dualValue(metrics.creatorFeesHoodieRaw, metrics.creatorFeesHoodie, hoodieUsd);
+  const ecosystem = dualValue(metrics.ecosystemFeesHoodieRaw, metrics.ecosystemFeesHoodie, hoodieUsd);
   return [
     {
       label: "Trading volume",
-      value: `${metrics.hoodieVolume} HOODIE`,
+      ...volume,
       note: "Canonical-pool volume measured from confirmed Swap events.",
     },
     {
       label: "Token launches",
       value: metrics.launches.toLocaleString("en-US"),
+      sub: undefined,
       note: "Validated HoodiePad markets created on Robinhood Chain.",
     },
     {
       label: "Trades",
       value: metrics.trades.toLocaleString("en-US"),
+      sub: undefined,
       note: "Confirmed swaps across every canonical CHILD / HOODIE pool.",
     },
     {
-      label: "Estimated creator fees",
-      value: `${metrics.creatorFeesHoodie} HOODIE`,
+      label: "Creator earnings",
+      ...creator,
       note: "HOODIE-side fee estimate at the immutable 80% creator share.",
     },
     {
-      label: "Estimated ecosystem fees",
-      value: `${metrics.ecosystemFeesHoodie} HOODIE`,
+      label: "Ecosystem revenue",
+      ...ecosystem,
       note: "HOODIE-side fee estimate at the immutable 15% ecosystem share.",
     },
     {
       label: "Unique creators",
       value: metrics.uniqueCreators.toLocaleString("en-US"),
+      sub: undefined,
       note: `${metrics.activeMarkets.toLocaleString("en-US")} markets traded in this period.`,
     },
   ];
@@ -125,7 +157,11 @@ export function AnalyticsDashboard({
   }, []);
 
   const metrics = period === "24h" ? analytics.rolling24h : analytics.allTime;
-  const cards = useMemo(() => metricCards(metrics), [metrics]);
+  const hoodieUsd = analytics.hoodieUsd ?? null;
+  const cards = useMemo(
+    () => metricCards(metrics, hoodieUsd),
+    [metrics, hoodieUsd],
+  );
   const updated = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -147,7 +183,7 @@ export function AnalyticsDashboard({
               Robinhood Chain.
             </p>
             <small>
-              Updated {updated} · refreshes every 15s
+              Updated {updated} · refreshes every 30s
               {refreshError ? ` · ${refreshError}` : ""}
             </small>
           </div>
@@ -173,6 +209,7 @@ export function AnalyticsDashboard({
             <article key={card.label}>
               <span>{period === "24h" ? "24h" : "All-time"} {card.label}</span>
               <strong>{card.value}</strong>
+              {card.sub && <small className="analytics-metric-sub">{card.sub}</small>}
               <p>{card.note}</p>
             </article>
           ))}
@@ -187,10 +224,14 @@ export function AnalyticsDashboard({
       <section className="analytics-chart-grid section-frame">
         <ActivityBars
           title="Trading volume"
-          description="HOODIE volume by UTC day."
+          description={hoodieUsd !== null
+            ? "USD volume by UTC day (HOODIE-side)."
+            : "HOODIE volume by UTC day."}
           data={analytics.daily}
           value={(item) => numericVolume(item.hoodieVolumeRaw)}
-          display={(item) => `${item.hoodieVolume} H`}
+          display={(item) => hoodieUsd !== null
+            ? formatUsd(numericVolume(item.hoodieVolumeRaw) * hoodieUsd) ?? "—"
+            : `${item.hoodieVolume} H`}
         />
         <ActivityBars
           title="Token launches"

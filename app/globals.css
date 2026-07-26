@@ -550,6 +550,7 @@ button { color: inherit; }
 .analytics-metric-grid { margin-top: 32px; display: grid; grid-template-columns: repeat(3, 1fr); overflow: hidden; border: 1.5px solid var(--ink); border-radius: 15px; }
 .analytics-metric-grid article { min-height: 175px; padding: 22px; display: flex; flex-direction: column; border-right: 1px solid #cfc7ba; border-bottom: 1px solid #cfc7ba; background: #f2ede3; }
 .analytics-metric-grid article:nth-child(3n) { border-right: 0; }
+.analytics-metric-sub { margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 750; }
 .analytics-metric-grid article:nth-last-child(-n+3) { border-bottom: 0; }
 .analytics-metric-grid span { color: var(--muted); font-size: 9px; }
 .analytics-metric-grid strong { margin-top: 18px; font-size: clamp(25px, 3vw, 43px); letter-spacing: -.055em; overflow-wrap: anywhere; }
