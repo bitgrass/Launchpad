@@ -57,7 +57,7 @@ function FeeClaimsInner({ address }: { address: string }) {
 
   useEffect(() => {
     const initial = window.setTimeout(refresh, 0);
-    const interval = window.setInterval(refresh, 30_000);
+    const interval = window.setInterval(refresh, 60_000);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(interval);

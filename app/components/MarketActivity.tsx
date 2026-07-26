@@ -76,7 +76,7 @@ export function MarketActivity({
       }
     };
     void load();
-    const interval = window.setInterval(load, 15_000);
+    const interval = window.setInterval(load, 30_000);
     return () => {
       active = false;
       window.clearInterval(interval);

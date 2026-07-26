@@ -37,7 +37,7 @@
   },
   "discovery": {
     "launchStartBlock": "17600000",
-    "refreshSeconds": 15,
+    "refreshSeconds": 30,
     "chartLookbackBlocks": 10000,
     "logChunkSize": 5000,
     "publicMarketVersion": "doppler-multicurve-v4-v2"

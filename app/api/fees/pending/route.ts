@@ -5,6 +5,12 @@ import { createRobinhoodPublicClient, ROBINHOOD_CHAIN_ID } from "../../../lib/pr
 
 export const revalidate = 0;
 
+type MulticurvePool = Awaited<ReturnType<DopplerSDK["getMulticurvePool"]>>;
+
+declare global {
+  var __hoodiepadFeePoolCache: Map<string, MulticurvePool> | undefined;
+}
+
 const addressPattern = /^0x[a-fA-F0-9]{40}$/;
 
 function formatFeeAmount(raw: bigint) {
@@ -26,6 +32,10 @@ export async function GET(request: Request) {
   }
   const account = getAddress(rawAccount);
 
+  // The SDK's pool discovery re-reads initializer state on every lookup;
+  // pool objects are stateless wrappers, so cache them per token.
+  const poolCache = globalThis.__hoodiepadFeePoolCache ??= new Map();
+
   try {
     const launches = await readHoodiePadLaunches();
     const client = createRobinhoodPublicClient();
@@ -42,7 +52,12 @@ export async function GET(request: Request) {
       const isCreator =
         launch.creator.toLowerCase() === account.toLowerCase();
       try {
-        const pool = await sdk.getMulticurvePool(getAddress(launch.address));
+        const poolKey = launch.address.toLowerCase();
+        let pool = poolCache.get(poolKey);
+        if (!pool) {
+          pool = await sdk.getMulticurvePool(getAddress(launch.address));
+          poolCache.set(poolKey, pool);
+        }
         const pending = await pool.getPendingFees(account);
         // fees0/fees1 follow poolKey currency order; map to token/HOODIE.
         const childIsCurrency0 =

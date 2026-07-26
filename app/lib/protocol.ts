@@ -93,14 +93,21 @@ function asAddress(value: string) {
   return value as Address;
 }
 
+function alchemyRpcUrl() {
+  const alchemyKey =
+    (process.env.Alchemy_API_KEY ?? process.env.ALCHEMY_API_KEY)?.trim();
+  return alchemyKey
+    ? `https://robinhood-mainnet.g.alchemy.com/v2/${alchemyKey}`
+    : "";
+}
+
 export function getRobinhoodRpcUrl(
   options: { requireExplicitRpc?: boolean } = {},
 ) {
   const explicit = process.env.ROBINHOOD_RPC_URL?.trim();
   if (explicit) return explicit;
-  const alchemyKey =
-    (process.env.Alchemy_API_KEY ?? process.env.ALCHEMY_API_KEY)?.trim();
-  if (alchemyKey) return `https://robinhood-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+  const alchemy = alchemyRpcUrl();
+  if (alchemy) return alchemy;
   // Launch preparation fails closed without an explicitly configured RPC
   // (AGENTS.md rule 12); public data reads fall back to the pinned public
   // Robinhood RPC so a missing env var degrades instead of taking every data
@@ -117,23 +124,37 @@ export function hasConfiguredRpc() {
   return rpcUrl().length > 0;
 }
 
+// Viem's request batching schedules timers that outlive a single request
+// context; the Cloudflare dev runtime (workerd) cancels those, so batching
+// is only enabled on the plain Node production server.
+const isWorkerdRuntime =
+  typeof navigator !== "undefined" &&
+  navigator.userAgent === "Cloudflare-Workers";
+
 export function createRobinhoodPublicClient(
   options: { requireExplicitRpc?: boolean } = {},
 ) {
   const url = getRobinhoodRpcUrl(options);
   if (!url) throw new Error("Robinhood RPC is not configured");
-  const publicUrl = product.network.rpcUrl?.trim();
-  // Runtime failover: when the configured RPC (for example Alchemy) errors or
-  // rate-limits, reads retry against the pinned public Robinhood RPC. This is
-  // distinct from the configuration fallback above — an explicitly configured
-  // endpoint stays primary and launch gating still fails closed without one.
-  const transport = publicUrl && publicUrl.toLowerCase() !== url.toLowerCase()
-    ? fallback([
-        http(url, { timeout: 12_000 }),
-        http(publicUrl, { timeout: 12_000 }),
-      ])
-    : http(url, { timeout: 12_000 });
-  return createPublicClient({ chain: robinhood, transport });
+  // Runtime failover: the configured primary stays first; the pinned public
+  // Robinhood RPC and the Alchemy endpoint (when a key is configured) serve
+  // as ordered backups. Launch gating still fails closed without an explicit
+  // configuration — this only changes which endpoints answer reads.
+  const fallbackUrls = [product.network.rpcUrl?.trim(), alchemyRpcUrl()]
+    .filter((candidate): candidate is string =>
+      !!candidate && candidate.toLowerCase() !== url.toLowerCase());
+  // `batch: true` coalesces concurrent JSON-RPC requests into one HTTP call;
+  // both the public Robinhood RPC and Alchemy accept batch payloads.
+  const transports = [url, ...fallbackUrls].map((endpoint) =>
+    http(endpoint, { timeout: 12_000, batch: !isWorkerdRuntime }));
+  return createPublicClient({
+    chain: robinhood,
+    transport: transports.length > 1 ? fallback(transports) : transports[0],
+    // Coalesce concurrent readContract calls into single Multicall3
+    // aggregate3 eth_calls — the dominant compute-unit saving for the
+    // registry, market, and swap read paths.
+    ...(isWorkerdRuntime ? {} : { batch: { multicall: { wait: 16 } } }),
+  });
 }
 
 function safeError(error: unknown) {

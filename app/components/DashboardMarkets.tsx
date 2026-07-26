@@ -16,7 +16,7 @@ export function DashboardMarkets({ markets: initialMarkets }: { markets: MarketC
       const payload = await response.json() as { markets?: MarketCardProps[] };
       if (active && Array.isArray(payload.markets)) setMarkets(payload.markets);
     };
-    const interval = window.setInterval(refresh, 15_000);
+    const interval = window.setInterval(refresh, 30_000);
     return () => {
       active = false;
       window.clearInterval(interval);

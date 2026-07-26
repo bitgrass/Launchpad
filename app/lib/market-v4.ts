@@ -22,6 +22,7 @@ import {
   readHoodiePadMetadata,
   safeHttpUrl,
   type HoodiePadMarket,
+  type TokenMetadata,
 } from "./market";
 import { PUBLIC_V4_MARKET_VERSION } from "./market-version";
 import { createRobinhoodPublicClient } from "./protocol";
@@ -104,11 +105,14 @@ function compactRational(value: ReturnType<typeof calculateFdv>) {
   return formatCompactValue(Number(decimal));
 }
 
-export async function readHoodiePadV4Market(
-  rawAddress: string,
-  client = createRobinhoodPublicClient(),
-): Promise<HoodiePadV4Market> {
-  const address = getAddress(rawAddress);
+// Everything a validated market never changes after launch: token facts,
+// Airlock and initializer state, the Rehype fee configuration, and the
+// immutable content-addressed metadata. Reading this once per process (and
+// only re-reading live pool state each refresh) is the main RPC saving.
+async function readV4MarketStaticsInner(
+  address: Address,
+  client: ReturnType<typeof createRobinhoodPublicClient>,
+) {
   const code = await client.getCode({ address });
   if (!code || code === "0x") {
     throw new Error("No token contract exists at this address");
@@ -122,7 +126,6 @@ export async function readHoodiePadV4Market(
     tokenUri,
     maxBalance,
     balanceLimitEnd,
-    balanceLimitActive,
     controller,
     vestingScheduleCount,
     poolLocked,
@@ -136,7 +139,6 @@ export async function readHoodiePadV4Market(
     client.readContract({ address, abi: dopplerERC20V1Abi, functionName: "tokenURI" }),
     client.readContract({ address, abi: dopplerERC20V1Abi, functionName: "maxBalanceLimit" }),
     client.readContract({ address, abi: dopplerERC20V1Abi, functionName: "balanceLimitEnd" }),
-    client.readContract({ address, abi: dopplerERC20V1Abi, functionName: "isBalanceLimitActive" }),
     client.readContract({ address, abi: dopplerERC20V1Abi, functionName: "controller" }),
     client.readContract({ address, abi: dopplerERC20V1Abi, functionName: "vestingScheduleCount" }),
     client.readContract({ address, abi: dopplerERC20V1Abi, functionName: "isPoolLocked" }),
@@ -164,26 +166,12 @@ export async function readHoodiePadV4Market(
   const poolId = computePoolId(poolKey);
   const externalHook = getAddress(state[2]);
   const [
-    slot0,
-    poolLiquidity,
     feeSchedule,
     feeRoutingMode,
     feeDistributionInfo,
     hookPoolInfo,
     metadata,
   ] = await Promise.all([
-    client.readContract({
-      address: getAddress(product.contracts.uniswapV4StateView),
-      abi: stateViewAbi,
-      functionName: "getSlot0",
-      args: [poolId],
-    }),
-    client.readContract({
-      address: getAddress(product.contracts.uniswapV4StateView),
-      abi: stateViewAbi,
-      functionName: "getLiquidity",
-      args: [poolId],
-    }),
     client.readContract({
       address: externalHook,
       abi: rehypeDopplerHookAbi,
@@ -208,8 +196,88 @@ export async function readHoodiePadV4Market(
       functionName: "getPoolInfo",
       args: [poolId],
     }),
-    readHoodiePadMetadata(tokenUri),
+    readHoodiePadMetadata(tokenUri) as Promise<TokenMetadata | null>,
   ]);
+
+  return {
+    name,
+    symbol,
+    decimals,
+    totalSupply,
+    tokenUri,
+    maxBalance,
+    balanceLimitEnd,
+    controller,
+    vestingScheduleCount,
+    poolLocked,
+    assetData,
+    state,
+    poolKey,
+    poolId,
+    externalHook,
+    feeSchedule,
+    feeRoutingMode,
+    feeDistributionInfo,
+    hookPoolInfo,
+    metadata,
+  };
+}
+
+export type V4MarketStatics = Awaited<ReturnType<typeof readV4MarketStaticsInner>>;
+
+export async function readHoodiePadV4Market(
+  rawAddress: string,
+  client = createRobinhoodPublicClient(),
+  staticsCache?: Map<string, V4MarketStatics>,
+): Promise<HoodiePadV4Market> {
+  const address = getAddress(rawAddress);
+  const cacheKey = address.toLowerCase();
+  let statics = staticsCache?.get(cacheKey);
+  const staticsWereCached = statics !== undefined;
+  if (!statics) {
+    statics = await readV4MarketStaticsInner(address, client);
+  }
+  const {
+    name,
+    symbol,
+    decimals,
+    totalSupply,
+    tokenUri,
+    maxBalance,
+    balanceLimitEnd,
+    controller,
+    vestingScheduleCount,
+    poolLocked,
+    assetData,
+    state,
+    poolKey,
+    poolId,
+    externalHook,
+    feeSchedule,
+    feeRoutingMode,
+    feeDistributionInfo,
+    hookPoolInfo,
+    metadata,
+  } = statics;
+
+  const [slot0, poolLiquidity] = await Promise.all([
+    client.readContract({
+      address: getAddress(product.contracts.uniswapV4StateView),
+      abi: stateViewAbi,
+      functionName: "getSlot0",
+      args: [poolId],
+    }),
+    client.readContract({
+      address: getAddress(product.contracts.uniswapV4StateView),
+      abi: stateViewAbi,
+      functionName: "getLiquidity",
+      args: [poolId],
+    }),
+  ]);
+  // The balance limit has a zero controller (enforced below), so its active
+  // window is purely time-derived and needs no per-refresh contract read.
+  const balanceLimitActive =
+    Math.floor(Date.now() / 1000) < Number(balanceLimitEnd);
 
   const hoodiePerToken = v4PriceForMarket(
     poolKey,
@@ -316,6 +384,10 @@ export async function readHoodiePadV4Market(
     .filter(([, passed]) => !passed)
     .map(([label]) => label);
   const official = validationErrors.length === 0;
+  // Only fully validated markets are safe to serve from cached statics.
+  if (official && staticsCache && !staticsWereCached) {
+    staticsCache.set(cacheKey, statics);
+  }
 
   return {
     version: PUBLIC_V4_MARKET_VERSION,

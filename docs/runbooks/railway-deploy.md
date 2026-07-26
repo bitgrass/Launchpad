@@ -159,7 +159,29 @@ trusted-host allowlist.
    the home page renders. Previously minted token URIs keep resolving on the
    Railway domain; both hostnames serve the same storage.
 
-## 6. Rollback and operations
+## 6. RPC usage and cost control
+
+The read path is optimized to keep RPC compute-unit consumption low:
+
+- Concurrent contract reads batch through the canonical Multicall3 and
+  JSON-RPC batching (production Node server only; the workerd dev runtime
+  cancels cross-request timers, so batching is disabled there).
+- Immutable market data (token facts, Airlock/initializer state, Rehype
+  configuration, metadata) is read once per process; refreshes re-read only
+  pool price and liquidity.
+- Event scans are incremental and snapshotted to
+  `$RAILWAY_VOLUME_MOUNT_PATH/hoodiepad/state/registry-cache.json`; a restart
+  scans only the delta since the snapshot instead of the full history.
+  History scans retry with backoff on RPC rate limits.
+- Registry refresh and client polling run on a 30–60 s cadence.
+
+Provider strategy: keep `Alchemy_API_KEY` configured as the primary. The
+pinned public Robinhood RPC serves as automatic runtime failover but
+rate-limits long history scans, so it cannot bootstrap a fresh environment
+by itself. Post-optimization steady-state usage is a small fraction of
+Alchemy's free monthly allowance.
+
+## 7. Rollback and operations
 
 - Turn off launch preparation immediately by setting
   `HOODIEPAD_BROADCAST_ENABLED=false`.

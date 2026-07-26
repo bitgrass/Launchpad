@@ -51,12 +51,12 @@ export default async function TokenPage({
   const [{ address }, query] = await Promise.all([params, searchParams]);
   let market: HoodiePadMarket;
   try {
-    market = await readVersionedHoodiePadMarket(address);
-    if (market.version === PUBLIC_V4_MARKET_VERSION) {
-      const { readHoodiePadV4Launch } = await import("../../lib/launches-v4");
-      const indexedMarket = await readHoodiePadV4Launch(getAddress(address));
-      if (indexedMarket) market = indexedMarket;
-    }
+    // Serve from the shared registry cache first — a direct chain read is
+    // only needed for tokens the registry does not know about.
+    const { readHoodiePadV4Launch } = await import("../../lib/launches-v4");
+    const indexedMarket = await readHoodiePadV4Launch(getAddress(address))
+      .catch(() => undefined);
+    market = indexedMarket ?? await readVersionedHoodiePadMarket(address);
   } catch (error) {
     const missingContract =
       error instanceof Error && error.message === "No token contract exists at this address";

@@ -162,7 +162,7 @@ export function SwapPanel({
 
   useEffect(() => {
     const initial = window.setTimeout(refreshContext, 0);
-    const interval = window.setInterval(refreshContext, 45_000);
+    const interval = window.setInterval(refreshContext, 60_000);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(interval);

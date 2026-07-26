@@ -117,7 +117,7 @@ export function AnalyticsDashboard({
         if (active) setRefreshError("Live refresh is temporarily unavailable.");
       }
     };
-    const interval = window.setInterval(load, 15_000);
+    const interval = window.setInterval(load, 30_000);
     return () => {
       active = false;
       window.clearInterval(interval);

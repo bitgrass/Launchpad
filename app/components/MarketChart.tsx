@@ -77,7 +77,7 @@ export function MarketChart({
       }
     };
     void load();
-    const interval = window.setInterval(load, 15_000);
+    const interval = window.setInterval(load, 30_000);
     return () => {
       active = false;
       window.clearInterval(interval);
@@ -94,7 +94,7 @@ export function MarketChart({
           <span>Live canonical-pool price</span>
           <strong>{data?.currentPrice ?? initialPrice} HOODIE</strong>
         </div>
-        <div className="chart-live-indicator"><span /> Refreshes every 15s</div>
+        <div className="chart-live-indicator"><span /> Refreshes every 30s</div>
       </div>
       {error ? (
         <div className="chart-empty"><strong>Chart unavailable</strong><p>{error}</p></div>

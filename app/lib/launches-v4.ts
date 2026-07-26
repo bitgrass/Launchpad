@@ -21,8 +21,13 @@ import {
   readHoodiePadV4Market,
   v4PriceForMarket,
   type HoodiePadV4Market,
+  type V4MarketStatics,
 } from "./market-v4";
 import { createRobinhoodPublicClient } from "./protocol";
+import {
+  loadPersistedRegistryCaches,
+  persistRegistryCaches,
+} from "./registry-cache-store";
 import { formatRational } from "./v4-price";
 
 type RobinhoodClient = ReturnType<typeof createRobinhoodPublicClient>;
@@ -67,7 +72,7 @@ type TransferCache = {
   checksumAddresses: Map<string, Address>;
 };
 
-type V4RegistryCaches = {
+export type V4RegistryCaches = {
   discovery?: {
     lastScannedBlock: bigint;
     creates: DecodedChainEvent[];
@@ -76,7 +81,10 @@ type V4RegistryCaches = {
   transfers: Map<string, TransferCache>;
   transactionSenders: Map<Hex, Address>;
   blockTimestamps: Map<string, number>;
+  marketStatics: Map<string, V4MarketStatics>;
 };
+
+export type { SwapLogCache, TransferCache, DecodedChainEvent };
 
 export function createV4RegistryCaches(): V4RegistryCaches {
   return {
@@ -84,6 +92,7 @@ export function createV4RegistryCaches(): V4RegistryCaches {
     transfers: new Map(),
     transactionSenders: new Map(),
     blockTimestamps: new Map(),
+    marketStatics: new Map(),
   };
 }
 
@@ -96,6 +105,7 @@ let cachedV4Launches:
 export function resetV4RegistryCaches() {
   globalRegistryCaches = createV4RegistryCaches();
   cachedV4Launches = undefined;
+  persistedCachesLoaded = undefined;
 }
 
 function absolute(value: bigint) {
@@ -108,6 +118,39 @@ function bigintMax(first: bigint, second: bigint) {
 
 function eventId(log: DecodedChainEvent) {
   return `${log.transactionHash ?? "0x"}:${log.logIndex ?? -1}`;
+}
+
+function isRateLimitError(error: unknown) {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current; depth += 1) {
+    if (current instanceof Error) {
+      parts.push(current.message);
+      current = (current as Error & { cause?: unknown }).cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+  const text = parts.join(" ").toLowerCase();
+  return text.includes("429") || text.includes("too many requests") ||
+    text.includes("rate limit");
+}
+
+// Long history scans can trip public-RPC rate limits; one throttled chunk
+// must not abort the whole registry load. Exponential backoff with jitter.
+async function withRateLimitRetry<T>(operation: () => Promise<T>): Promise<T> {
+  let delay = 400;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt >= 5 || !isRateLimitError(error)) throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, delay + Math.floor(Math.random() * 200)));
+      delay = Math.min(delay * 2, 5_000);
+    }
+  }
 }
 
 function compactAmount(raw: bigint, decimals = 18) {
@@ -136,14 +179,14 @@ async function readCreateChunks(
       fromBlock + logChunkSize - 1n < input.toBlock
         ? fromBlock + logChunkSize - 1n
         : input.toBlock;
-    const chunk = await client.getContractEvents({
+    const chunk = await withRateLimitRetry(() => client.getContractEvents({
       address: getAddress(product.contracts.airlock),
       abi: airlockAbi,
       eventName: "Create",
       args: { numeraire: getAddress(product.contracts.hoodie) },
       fromBlock,
       toBlock,
-    } as Parameters<RobinhoodClient["getContractEvents"]>[0]);
+    } as Parameters<RobinhoodClient["getContractEvents"]>[0]));
     events.push(...chunk as unknown as DecodedChainEvent[]);
   }
   return events;
@@ -165,13 +208,13 @@ async function readV4SwapChunks(
       cursor + logChunkSize - 1n < toBlock
         ? cursor + logChunkSize - 1n
         : toBlock;
-    const chunk = await client.getLogs({
+    const chunk = await withRateLimitRetry(() => client.getLogs({
       address: getAddress(product.contracts.uniswapV4PoolManager),
       event: v4SwapEvent,
       args: { id: poolId },
       fromBlock: cursor,
       toBlock: chunkEnd,
-    } as Parameters<RobinhoodClient["getLogs"]>[0]);
+    } as Parameters<RobinhoodClient["getLogs"]>[0]));
     events.push(...chunk as unknown as DecodedChainEvent[]);
   }
   return events;
@@ -193,12 +236,12 @@ async function readTransferChunks(
       cursor + logChunkSize - 1n < toBlock
         ? cursor + logChunkSize - 1n
         : toBlock;
-    const chunk = await client.getLogs({
+    const chunk = await withRateLimitRetry(() => client.getLogs({
       address: token,
       event: erc20TransferEvent,
       fromBlock: cursor,
       toBlock: chunkEnd,
-    } as Parameters<RobinhoodClient["getLogs"]>[0]);
+    } as Parameters<RobinhoodClient["getLogs"]>[0]));
     events.push(...chunk as unknown as DecodedChainEvent[]);
   }
   return events;
@@ -555,10 +598,29 @@ async function loadV4Launches(
     ) {
       throw new Error("Airlock Create event is not a HoodiePad V2 candidate");
     }
-    const [market, receipt, launchBlock] = await Promise.all([
-      readHoodiePadV4Market(args.asset, client),
-      client.getTransactionReceipt({ hash: log.transactionHash }),
-      client.getBlock({ blockNumber: log.blockNumber }),
+    // The launch sender and block timestamp never change; memoize them so a
+    // refresh costs no per-launch receipt or block lookups.
+    const blockKey = log.blockNumber.toString();
+    const [market, creator, launchTimestamp] = await Promise.all([
+      readHoodiePadV4Market(args.asset, client, caches.marketStatics),
+      (async () => {
+        const cached = caches.transactionSenders.get(log.transactionHash!);
+        if (cached) return cached;
+        const transaction = await client.getTransaction({
+          hash: log.transactionHash!,
+        });
+        const sender = getAddress(transaction.from);
+        caches.transactionSenders.set(log.transactionHash!, sender);
+        return sender;
+      })(),
+      (async () => {
+        const cached = caches.blockTimestamps.get(blockKey);
+        if (cached !== undefined) return cached;
+        const block = await client.getBlock({ blockNumber: log.blockNumber! });
+        const timestamp = Number(block.timestamp);
+        caches.blockTimestamps.set(blockKey, timestamp);
+        return timestamp;
+      })(),
     ]);
     if (!market.official) {
       throw new Error(
@@ -574,9 +636,9 @@ async function loadV4Launches(
     return {
       ...market,
       hasSwapActivity: analytics.swapCount > 0,
-      creator: getAddress(receipt.from),
-      launchBlock: log.blockNumber.toString(),
-      launchTimestamp: Number(launchBlock.timestamp),
+      creator,
+      launchBlock: blockKey,
+      launchTimestamp,
       launchTransactionHash: log.transactionHash,
       analytics,
     } satisfies HoodiePadV4Launch;
@@ -602,28 +664,38 @@ async function loadV4Launches(
     );
 }
 
+let persistedCachesLoaded: Promise<void> | undefined;
+
 export function readHoodiePadV4Launches() {
   const now = Date.now();
   if (cachedV4Launches && cachedV4Launches.expiresAt > now) {
     return cachedV4Launches.promise;
   }
-  const promise = loadV4Launches(
-    createRobinhoodPublicClient(),
-    globalRegistryCaches,
-  ).then((launches) => {
-    // Start the freshness window only once the scan has finished so a slow
-    // scan is not already stale (and immediately re-triggered) on arrival.
-    if (cachedV4Launches?.promise === promise) {
-      cachedV4Launches.expiresAt =
-        Date.now() + product.discovery.refreshSeconds * 1000;
-    }
-    return launches;
-  }).catch((error) => {
-    if (cachedV4Launches?.promise === promise) {
-      cachedV4Launches = undefined;
-    }
-    throw error;
-  });
+  // Warm the incremental caches from the persisted snapshot exactly once per
+  // process so a restart does not rescan the whole chain history.
+  persistedCachesLoaded ??= loadPersistedRegistryCaches(globalRegistryCaches);
+  const promise = persistedCachesLoaded
+    .catch(() => undefined)
+    .then(() => loadV4Launches(
+      createRobinhoodPublicClient(),
+      globalRegistryCaches,
+    ))
+    .then((launches) => {
+      // Start the freshness window only once the scan has finished so a slow
+      // scan is not already stale (and immediately re-triggered) on arrival.
+      if (cachedV4Launches?.promise === promise) {
+        cachedV4Launches.expiresAt =
+          Date.now() + product.discovery.refreshSeconds * 1000;
+      }
+      void persistRegistryCaches(globalRegistryCaches);
+      return launches;
+    })
+    .catch((error) => {
+      if (cachedV4Launches?.promise === promise) {
+        cachedV4Launches = undefined;
+      }
+      throw error;
+    });
   cachedV4Launches = { expiresAt: Number.MAX_SAFE_INTEGER, promise };
   return promise;
 }

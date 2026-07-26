@@ -99,7 +99,7 @@ export function ExploreMarkets({
       if (payload.hoodieUsd !== undefined) setHoodieUsd(payload.hoodieUsd);
     };
     const initial = window.setTimeout(refresh, 0);
-    const interval = window.setInterval(refresh, 15_000);
+    const interval = window.setInterval(refresh, 30_000);
     return () => {
       active = false;
       window.clearTimeout(initial);
