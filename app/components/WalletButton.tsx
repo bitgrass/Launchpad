@@ -144,8 +144,8 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
           <Link href="/leaderboard" role="menuitem" onClick={() => setMenuOpen(false)}>
             <span aria-hidden="true">🏆</span> Leaderboard rank
           </Link>
-          <Link href="/about" role="menuitem" onClick={() => setMenuOpen(false)}>
-            <span aria-hidden="true">📖</span> How it works
+          <Link href="/docs" role="menuitem" onClick={() => setMenuOpen(false)}>
+            <span aria-hidden="true">📖</span> Docs
           </Link>
           <button
             type="button"

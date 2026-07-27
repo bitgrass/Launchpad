@@ -43,6 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p>Fair markets for the Robinhood Chain trenches.</p>
         </div>
         <div className="footer-links">
+          <Link href="/docs">Docs</Link>
           <Link href="/about">How it works</Link>
           <Link href="/analytics">Analytics</Link>
           <Link href="/fuel">HOODIE Fuel</Link>
