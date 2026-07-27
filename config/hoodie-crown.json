@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "name": "KING_OF_THE_HOOD",
+  "description": "Objective, on-chain crown for the strongest HoodiePad market in the trailing 24 hours. Never curated, never sold.",
+  "gates": {
+    "minimumTrades24h": 5,
+    "minimumHolders": 5,
+    "minimumVolume24hUsd": 100
+  },
+  "weights": {
+    "volume24h": 40,
+    "trades24h": 25,
+    "holders": 20,
+    "change24h": 15
+  }
+}

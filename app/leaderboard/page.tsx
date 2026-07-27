@@ -1,6 +1,8 @@
 import { AppShell } from "../components/AppShell";
+import { KingOfTheHood } from "../components/KingOfTheHood";
 import { LeaderboardTables } from "../components/LeaderboardTables";
 import { readDisplayPrices } from "../lib/display-prices";
+import { readCrownState } from "../lib/king";
 import { readHoodiePadLaunches } from "../lib/launches";
 import {
   buildCreatorLeaderboard,
@@ -15,6 +17,7 @@ export default async function LeaderboardPage() {
     readHoodiePadLaunches().catch(() => []),
     readDisplayPrices().catch(() => ({ ethUsd: null, hoodieUsd: null })),
   ]);
+  const crown = await readCrownState(launches, prices.hoodieUsd).catch(() => null);
 
   return (
     <AppShell>
@@ -26,6 +29,7 @@ export default async function LeaderboardPage() {
           never curated, never sold.
         </p>
       </section>
+      {crown && <KingOfTheHood initial={{ ...crown, hoodieUsd: prices.hoodieUsd }} />}
       <LeaderboardTables
         initial={{
           traders: buildTraderLeaderboard(launches).slice(0, 50),

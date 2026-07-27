@@ -24,6 +24,7 @@ import {
   V4_TOTAL_SUPPLY,
   WAD,
 } from "../app/lib/v4-policy";
+import { scoreCrownCandidates } from "../app/lib/king";
 import {
   Q96,
   calculateDeviationBps,
@@ -164,4 +165,47 @@ test("records the exact required SDK independently of the installed blocker", ()
     isExactV4SdkInstalled(),
     DECLARED_DOPPLER_SDK_VERSION === product.dependencies.dopplerSdk,
   );
+});
+
+test("crowns only markets that clear every activity gate", () => {
+  const market = (overrides: {
+    symbol: string;
+    volume24h: bigint;
+    trades24h: number;
+    holders: number;
+    change24h?: number | null;
+  }) => ({
+    address: `0x${overrides.symbol.padEnd(40, "0")}`,
+    symbol: overrides.symbol,
+    name: `${overrides.symbol} market`,
+    analytics: {
+      hoodieVolume24hRaw: overrides.volume24h.toString(),
+      swapCount24h: overrides.trades24h,
+      holderCount: overrides.holders,
+      changePercent24h: overrides.change24h ?? 0,
+    },
+  }) as unknown as Parameters<typeof scoreCrownCandidates>[0][number];
+
+  const one = 10n ** 18n;
+  // 1 HOODIE = $1 keeps the volume gate arithmetic obvious in this test.
+  const candidates = scoreCrownCandidates([
+    market({ symbol: "STRONG", volume24h: 500n * one, trades24h: 12, holders: 9, change24h: 40 }),
+    market({ symbol: "THIN", volume24h: 900n * one, trades24h: 3, holders: 9 }),
+    market({ symbol: "LONELY", volume24h: 900n * one, trades24h: 20, holders: 2 }),
+    market({ symbol: "QUIET", volume24h: 10n * one, trades24h: 8, holders: 8 }),
+  ], 1);
+
+  const bySymbol = Object.fromEntries(
+    candidates.map((candidate) => [candidate.symbol, candidate]),
+  );
+  assert.equal(bySymbol.STRONG.eligible, true);
+  assert.equal(bySymbol.THIN.eligible, false);
+  assert.equal(bySymbol.LONELY.eligible, false);
+  assert.equal(bySymbol.QUIET.eligible, false);
+  // The only eligible market tops every normalized component.
+  assert.equal(bySymbol.STRONG.score, 100);
+  // Ineligible markets never receive a score, whatever their raw volume.
+  assert.equal(bySymbol.THIN.score, 0);
+  assert.equal(candidates[0].symbol, "STRONG");
+  assert.ok(bySymbol.LONELY.missing.some((item) => item.includes("holders")));
 });

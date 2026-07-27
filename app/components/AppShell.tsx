@@ -30,6 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav aria-label="Main navigation">
           <Link href="/explore">Explore</Link>
           <Link href="/leaderboard">Leaderboard</Link>
+          <Link href="/fuel">Fuel</Link>
           <Link href="/analytics">Analytics</Link>
           <Link href="/launch">Launch</Link>
           <Link href="/dashboard">Dashboard</Link>

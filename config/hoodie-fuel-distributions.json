@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "note": "Ledger of ecosystem distributions executed from the HOODIE ecosystem Safe. Entries are added only after an on-chain transaction exists, and every entry must carry its transaction hash so anyone can verify it. HoodiePad contracts do not perform automatic buybacks or burns.",
+  "distributions": []
+}
