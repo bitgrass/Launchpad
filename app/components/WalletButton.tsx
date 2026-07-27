@@ -1,17 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { Avatar } from "./Avatar";
 import { useWallet, WALLETS, type WalletId } from "./WalletProvider";
 
 function shorten(address: string) {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+  return `${address.slice(0, 4)}…${address.slice(-4)}`;
 }
 
-function WalletMark({ id }: { id: WalletId }) {
+function WalletMark({ id, size = 26 }: { id: WalletId; size?: number }) {
   return (
-    <span className={`wallet-mark is-${id}`} aria-hidden="true">
-      {id === "metamask" ? "🦊" : "👻"}
-    </span>
+    <span
+      className="wallet-mark"
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        backgroundImage: `url("/wallets/${id}.svg")`,
+      }}
+    />
   );
 }
 
@@ -54,7 +62,7 @@ export function WalletPicker({ onClose }: { onClose: () => void }) {
                   onClose();
                 }}
               >
-                <WalletMark id={wallet.id} />
+                <WalletMark id={wallet.id} size={30} />
                 <span className="wallet-option-name">
                   <strong>{wallet.name}</strong>
                   <small>{wallet.hint}</small>
@@ -76,27 +84,98 @@ export function WalletPicker({ onClose }: { onClose: () => void }) {
 }
 
 export function WalletButton({ compact = false }: { compact?: boolean }) {
-  const { address, walletId, status, disconnect } = useWallet();
+  const { address, status, disconnect } = useWallet();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function onPointerDown(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    }
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
+  if (!address) {
+    return (
+      <>
+        <button
+          className={`wallet-button${compact ? " wallet-button-compact" : ""}`}
+          onClick={() => setPickerOpen(true)}
+          type="button"
+          aria-label="Connect wallet"
+        >
+          <span className="wallet-dot" />
+          {status === "connecting" ? "Connecting…" : "Connect"}
+        </button>
+        {pickerOpen && <WalletPicker onClose={() => setPickerOpen(false)} />}
+      </>
+    );
+  }
 
   return (
-    <>
+    <div className="profile-menu" ref={menuRef}>
       <button
-        className={`wallet-button${compact ? " wallet-button-compact" : ""}`}
-        onClick={() => (address ? disconnect() : setPickerOpen(true))}
         type="button"
-        aria-label={address ? `Connected wallet ${address}` : "Connect wallet"}
-        title={address ? "Click to disconnect" : undefined}
+        className="profile-trigger"
+        onClick={() => setMenuOpen((open) => !open)}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-label={`Profile ${address}`}
       >
-        <span className={`wallet-dot ${address ? "is-live" : ""}`} />
-        {address
-          ? shorten(address)
-          : status === "connecting"
-            ? "Connecting…"
-            : "Connect"}
-        {address && walletId && <WalletMark id={walletId} />}
+        <Avatar address={address} size={26} />
+        <code>{shorten(address)}</code>
+        <span className="profile-caret" aria-hidden="true">▾</span>
       </button>
-      {pickerOpen && <WalletPicker onClose={() => setPickerOpen(false)} />}
-    </>
+      {menuOpen && (
+        <div className="profile-dropdown" role="menu">
+          <div className="profile-identity">
+            <Avatar address={address} size={42} />
+            <div>
+              <strong>My hood</strong>
+              <code>{shorten(address)}</code>
+            </div>
+          </div>
+          <Link href="/dashboard" role="menuitem" onClick={() => setMenuOpen(false)}>
+            <span aria-hidden="true">📊</span> Dashboard &amp; fees
+          </Link>
+          <Link href="/leaderboard" role="menuitem" onClick={() => setMenuOpen(false)}>
+            <span aria-hidden="true">🏆</span> Leaderboard rank
+          </Link>
+          <Link href="/about" role="menuitem" onClick={() => setMenuOpen(false)}>
+            <span aria-hidden="true">📖</span> How it works
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(address);
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1_500);
+              } catch {
+                // Clipboard unavailable; leave the label unchanged.
+              }
+            }}
+          >
+            <span aria-hidden="true">{copied ? "✓" : "⧉"}</span>
+            {copied ? "Copied" : "Copy address"}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="is-danger"
+            onClick={() => {
+              disconnect();
+              setMenuOpen(false);
+            }}
+          >
+            <span aria-hidden="true">⏻</span> Disconnect
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

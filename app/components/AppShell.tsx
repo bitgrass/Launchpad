@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Brand } from "./Brand";
+import { HeaderNav } from "./HeaderNav";
 import { LiveTicker } from "./LiveTicker";
 import { WalletButton } from "./WalletButton";
 
@@ -27,16 +28,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <LiveTicker />
       <header className="site-header">
         <Brand />
-        <nav aria-label="Main navigation">
-          <Link href="/explore">Explore</Link>
-          <Link href="/leaderboard">Leaderboard</Link>
-          <Link href="/fuel">Fuel</Link>
-          <Link href="/analytics">Analytics</Link>
-          <Link href="/launch">Launch</Link>
-          <Link href="/dashboard">Dashboard</Link>
-          <Link href="/about">How it works</Link>
-        </nav>
-        <WalletButton />
+        <HeaderNav />
+        <div className="header-actions">
+          <Link className="button button-primary header-launch" href="/launch">
+            Launch a token <span aria-hidden="true">↗</span>
+          </Link>
+          <WalletButton />
+        </div>
       </header>
       <main>{children}</main>
       <footer className="site-footer">
@@ -45,6 +43,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p>Fair markets for the Robinhood Chain trenches.</p>
         </div>
         <div className="footer-links">
+          <Link href="/about">How it works</Link>
+          <Link href="/analytics">Analytics</Link>
+          <Link href="/fuel">HOODIE Fuel</Link>
           <a href="https://hoodie.fun" target="_blank" rel="noreferrer">
             $HOODIE ↗
           </a>

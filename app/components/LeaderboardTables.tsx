@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Avatar } from "./Avatar";
 import type { CreatorRow, TraderRow } from "../lib/leaderboard";
 
 type LeaderboardData = {
@@ -75,9 +76,7 @@ export function LeaderboardTables({
         <section className="section-frame leaderboard-hero">
           <article className="leader-card">
             <div className="leader-head">
-              <span className="leader-avatar" aria-hidden="true">
-                {leader.address.slice(2, 4).toUpperCase()}
-              </span>
+              <Avatar address={leader.address} size={54} className="leader-avatar" />
               <div>
                 <code>{shorten(leader.address)}</code>
                 <strong className={signedClass(leader.realizedHoodie)}>
@@ -197,9 +196,7 @@ export function LeaderboardTables({
                           target="_blank"
                           rel="noreferrer"
                         >
-                          <span className="token-chip-logo" aria-hidden="true">
-                            {row.address.slice(2, 4).toUpperCase()}
-                          </span>
+                          <Avatar address={row.address} size={30} />
                           <span className="market-table-name">
                             <strong>{shorten(row.address)}</strong>
                             <small>{row.trades} trades · {row.markets} markets</small>
@@ -269,15 +266,11 @@ export function LeaderboardTables({
                         target="_blank"
                         rel="noreferrer"
                       >
-                        <span
-                          className="token-chip-logo"
-                          aria-hidden="true"
-                          style={row.topImageUrl
-                            ? { backgroundImage: `url("${row.topImageUrl.replaceAll('"', "%22")}")` }
-                            : undefined}
-                        >
-                          {row.topImageUrl ? "" : row.topSymbol.slice(0, 2)}
-                        </span>
+                        <Avatar
+                          address={row.address}
+                          size={30}
+                          imageUrl={row.topImageUrl}
+                        />
                         <span className="market-table-name">
                           <strong>{shorten(row.address)}</strong>
                           <small>top market ${row.topSymbol}</small>
