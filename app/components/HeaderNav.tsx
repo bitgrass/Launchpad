@@ -8,6 +8,7 @@ export function HeaderNav() {
       <Link href="/explore">Explore</Link>
       <Link href="/analytics">Analytics</Link>
       <Link href="/leaderboard">Leaderboard</Link>
+      <Link href="/docs">Docs</Link>
     </nav>
   );
 }

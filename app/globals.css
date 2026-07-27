@@ -34,7 +34,9 @@ button { color: inherit; }
 
 ::selection { background: var(--acid); color: var(--ink); }
 
-.site-shell { min-height: 100vh; overflow: hidden; }
+/* clip-x rather than overflow:hidden — the latter makes this an overflow
+   container, which silently disables position:sticky for every descendant. */
+.site-shell { min-height: 100vh; overflow-x: clip; }
 
 .ticker {
   height: 34px;
@@ -464,8 +466,8 @@ button { color: inherit; }
 .token-chip-menu button small { margin-left: auto; color: var(--muted); font-size: 8px; font-weight: 650; }
 .token-chip-menu button:hover { background: #eee7d9; }
 .token-chip-menu button.is-selected { background: var(--acid); }
-.docs-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 42px; align-items: start; padding-bottom: 90px; }
-.docs-nav { position: sticky; top: 24px; display: grid; gap: 18px; }
+.docs-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 42px; align-items: start; padding-top: 46px; padding-bottom: 90px; }
+.docs-nav { position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto; display: grid; gap: 18px; align-content: start; }
 .docs-nav > div > span { display: block; margin-bottom: 7px; color: var(--muted); font-size: 9px; font-weight: 850; text-transform: uppercase; letter-spacing: .08em; }
 .docs-nav ul { margin: 0; padding: 0; list-style: none; border-left: 2px solid #ded6c9; }
 .docs-nav li a { display: block; padding: 6px 0 6px 13px; margin-left: -2px; border-left: 2px solid transparent; color: var(--muted); font-size: 11.5px; font-weight: 750; text-decoration: none; }
