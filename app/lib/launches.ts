@@ -47,6 +47,122 @@ export type MarketDailyActivity = {
   hoodieFeeVolumeRaw: string;
 };
 
+export type TraderMarketStats = {
+  trader: Address;
+  // All HOODIE-denominated values are wei strings; realized may be negative.
+  realizedRaw: string;
+  costBasisRaw: string;
+  positionRaw: string;
+  volumeRaw: string;
+  buys: number;
+  sells: number;
+  closes: number;
+  wins: number;
+  days: string[];
+  lastTimestamp: number;
+};
+
+const WAD = 10n ** 18n;
+
+function priceToWei(price: number) {
+  if (!Number.isFinite(price) || price <= 0) return 0n;
+  // Display-grade conversion of a HOODIE-per-token price into wei scale.
+  return BigInt(Math.round(price * 1e18));
+}
+
+// Average-cost accounting per wallet, computed from the canonical Swap events
+// this registry already indexes. Realized profit is only booked when a
+// position is (partly) closed; the remaining cost basis stays open so the
+// caller can value it at the current price.
+export function aggregateTraderStats(
+  points: MarketSwapPoint[],
+): TraderMarketStats[] {
+  const accounts = new Map<string, {
+    trader: Address;
+    realized: bigint;
+    costBasis: bigint;
+    position: bigint;
+    volume: bigint;
+    buys: number;
+    sells: number;
+    closes: number;
+    wins: number;
+    days: Set<string>;
+    lastTimestamp: number;
+  }>();
+
+  for (const point of points) {
+    const key = point.trader.toLowerCase();
+    if (key === "0x0000000000000000000000000000000000000000") continue;
+    let account = accounts.get(key);
+    if (!account) {
+      account = {
+        trader: point.trader,
+        realized: 0n,
+        costBasis: 0n,
+        position: 0n,
+        volume: 0n,
+        buys: 0,
+        sells: 0,
+        closes: 0,
+        wins: 0,
+        days: new Set(),
+        lastTimestamp: 0,
+      };
+      accounts.set(key, account);
+    }
+    const hoodie = BigInt(point.hoodieVolumeRaw);
+    const child = BigInt(point.childVolumeRaw);
+    account.volume += hoodie;
+    account.lastTimestamp = Math.max(account.lastTimestamp, point.timestamp);
+    if (point.timestamp > 0) {
+      account.days.add(new Date(point.timestamp * 1000).toISOString().slice(0, 10));
+    }
+    if (point.side === "buy") {
+      account.buys += 1;
+      account.position += child;
+      account.costBasis += hoodie;
+      continue;
+    }
+    account.sells += 1;
+    if (account.position <= 0n || child <= 0n) continue;
+    const sold = child > account.position ? account.position : child;
+    const costOfSold = account.costBasis * sold / account.position;
+    const gain = hoodie * sold / child - costOfSold;
+    account.realized += gain;
+    account.costBasis -= costOfSold;
+    account.position -= sold;
+    account.closes += 1;
+    if (gain > 0n) account.wins += 1;
+  }
+
+  return [...accounts.values()].map((account) => ({
+    trader: account.trader,
+    realizedRaw: account.realized.toString(),
+    costBasisRaw: account.costBasis.toString(),
+    positionRaw: account.position.toString(),
+    volumeRaw: account.volume.toString(),
+    buys: account.buys,
+    sells: account.sells,
+    closes: account.closes,
+    wins: account.wins,
+    days: [...account.days],
+    lastTimestamp: account.lastTimestamp,
+  }));
+}
+
+// Values an open position at the market's current HOODIE price.
+export function unrealizedForStats(
+  stats: TraderMarketStats,
+  hoodiePerToken: number,
+) {
+  const position = BigInt(stats.positionRaw);
+  if (position <= 0n) return 0n;
+  const priceWei = priceToWei(hoodiePerToken);
+  if (priceWei <= 0n) return 0n;
+  return position * priceWei / WAD - BigInt(stats.costBasisRaw);
+}
+
 export type MarketAnalytics = {
   points: MarketSwapPoint[];
   swapCount: number;
@@ -62,6 +178,7 @@ export type MarketAnalytics = {
   holderCount: number;
   holders: MarketHolder[];
   daily: MarketDailyActivity[];
+  traders: TraderMarketStats[];
 };
 
 // Price change over the trailing 24h window: latest trade price versus the
@@ -425,6 +542,7 @@ export async function readMarketAnalytics(
     changePercent24h: change24hFromPoints(points, cutoff24h),
     holderCount: holderData.holderCount,
     holders: holderData.holders,
+    traders: aggregateTraderStats(points),
     daily: [...dailyActivity.entries()]
       .sort(([first], [second]) => first.localeCompare(second))
       .map(([date, activity]) => ({

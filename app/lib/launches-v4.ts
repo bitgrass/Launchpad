@@ -11,6 +11,7 @@ import {
 } from "viem";
 import product from "../../config/hoodiepad-v2.json";
 import {
+  aggregateTraderStats,
   change24hFromPoints,
   type HoodiePadLaunch,
   type MarketAnalytics,
@@ -549,6 +550,7 @@ export async function readV4MarketAnalytics(
     changePercent24h: change24hFromPoints(points, cutoff24h),
     holderCount: holderData.holderCount,
     holders: holderData.holders,
+    traders: aggregateTraderStats(points),
     daily: [...dailyActivity.entries()]
       .sort(([first], [second]) => (first < second ? -1 : first > second ? 1 : 0))
       .map(([date, activity]) => ({

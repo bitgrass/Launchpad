@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Brand } from "./Brand";
+import { LiveTicker } from "./LiveTicker";
 import { WalletButton } from "./WalletButton";
 
 const tickerItems = [
@@ -23,10 +24,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </div>
       </div>
+      <LiveTicker />
       <header className="site-header">
         <Brand />
         <nav aria-label="Main navigation">
           <Link href="/explore">Explore</Link>
+          <Link href="/leaderboard">Leaderboard</Link>
           <Link href="/analytics">Analytics</Link>
           <Link href="/launch">Launch</Link>
           <Link href="/dashboard">Dashboard</Link>

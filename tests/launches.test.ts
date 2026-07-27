@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { createRobinhoodPublicClient } from "../app/lib/protocol";
-import { readMarketAnalytics } from "../app/lib/launches";
+import {
+  aggregateTraderStats,
+  readMarketAnalytics,
+  unrealizedForStats,
+  type MarketSwapPoint,
+} from "../app/lib/launches";
 import {
   createV4RegistryCaches,
   readV4MarketAnalytics,
@@ -284,4 +289,96 @@ test("V4 analytics rescans only new blocks and never double-counts overlap", asy
   for (const scan of scans.slice(scansBeforeSecond)) {
     assert.ok(scan.fromBlock >= 18_540_000n - 5n);
   }
+});
+
+// --- Trader PnL accounting -------------------------------------------------
+
+function swapPoint(overrides: Partial<MarketSwapPoint>): MarketSwapPoint {
+  return {
+    blockNumber: "1",
+    transactionHash: `0x${"a".repeat(64)}` as `0x${string}`,
+    logIndex: 0,
+    timestamp: 1_785_000_000,
+    side: "buy",
+    trader: trader as `0x${string}`,
+    price: 1,
+    hoodieVolumeRaw: "0",
+    hoodieFeeVolumeRaw: "0",
+    childVolumeRaw: "0",
+    ...overrides,
+  };
+}
+
+test("books realized profit with average-cost accounting on partial exits", () => {
+  const one = 10n ** 18n;
+  // Buy 100 tokens for 100 HOODIE, buy 100 more for 300 HOODIE
+  // (average cost 2 HOODIE), then sell half the stack for 400 HOODIE.
+  const points: MarketSwapPoint[] = [
+    swapPoint({
+      side: "buy",
+      childVolumeRaw: (100n * one).toString(),
+      hoodieVolumeRaw: (100n * one).toString(),
+      timestamp: 1_784_900_000,
+    }),
+    swapPoint({
+      side: "buy",
+      childVolumeRaw: (100n * one).toString(),
+      hoodieVolumeRaw: (300n * one).toString(),
+      timestamp: 1_784_950_000,
+    }),
+    swapPoint({
+      side: "sell",
+      childVolumeRaw: (100n * one).toString(),
+      hoodieVolumeRaw: (400n * one).toString(),
+      timestamp: 1_785_000_000,
+    }),
+  ];
+
+  const [stats] = aggregateTraderStats(points);
+  // Sold 100 of 200 tokens carrying 400 HOODIE of cost: 200 cost released,
+  // 400 received, so 200 HOODIE realized and 200 HOODIE still deployed.
+  assert.equal(stats.realizedRaw, (200n * one).toString());
+  assert.equal(stats.costBasisRaw, (200n * one).toString());
+  assert.equal(stats.positionRaw, (100n * one).toString());
+  assert.equal(stats.closes, 1);
+  assert.equal(stats.wins, 1);
+  assert.equal(stats.buys, 2);
+  assert.equal(stats.sells, 1);
+  // The three fills land on two distinct UTC days.
+  assert.equal(stats.days.length, 2);
+
+  // The open half is valued at the live price, not at cost.
+  assert.equal(unrealizedForStats(stats, 4), 200n * one);
+  assert.equal(unrealizedForStats(stats, 2), 0n);
+});
+
+test("books a loss and never lets a sell without inventory create profit", () => {
+  const one = 10n ** 18n;
+  const losing = aggregateTraderStats([
+    swapPoint({
+      side: "buy",
+      childVolumeRaw: (100n * one).toString(),
+      hoodieVolumeRaw: (500n * one).toString(),
+    }),
+    swapPoint({
+      side: "sell",
+      childVolumeRaw: (100n * one).toString(),
+      hoodieVolumeRaw: (300n * one).toString(),
+    }),
+  ])[0];
+  assert.equal(losing.realizedRaw, (-200n * one).toString());
+  assert.equal(losing.wins, 0);
+  assert.equal(losing.closes, 1);
+
+  // Tokens acquired outside the pool (airdrop, transfer) have no cost basis
+  // here; selling them must not book phantom profit.
+  const noInventory = aggregateTraderStats([
+    swapPoint({
+      side: "sell",
+      childVolumeRaw: (100n * one).toString(),
+      hoodieVolumeRaw: (900n * one).toString(),
+    }),
+  ])[0];
+  assert.equal(noInventory.realizedRaw, "0");
+  assert.equal(noInventory.closes, 0);
 });

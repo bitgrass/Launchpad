@@ -5,6 +5,7 @@ import { AppShell } from "../../components/AppShell";
 import { MarketActivity } from "../../components/MarketActivity";
 import { MarketChart } from "../../components/MarketChart";
 import { SwapPanel } from "../../components/SwapPanel";
+import { CurveProgress } from "../../components/CurveProgress";
 import { TokenMetaBar } from "../../components/TokenMetaBar";
 import { readDisplayPrices } from "../../lib/display-prices";
 import { type MarketAnalytics } from "../../lib/launches";
@@ -247,6 +248,7 @@ export default async function TokenPage({
                   : "POOL READY"}
             </span>
           </div>
+          {isV4 && <CurveProgress fdvUsd={fdvUsd} />}
           <MarketChart token={market.address} initialPrice={market.hoodiePerToken} />
           <div className="chart-pool-links">
             <a href={explorerPool} target="_blank" rel="noreferrer">
