@@ -464,15 +464,8 @@ button { color: inherit; }
 .token-chip-menu button small { margin-left: auto; color: var(--muted); font-size: 8px; font-weight: 650; }
 .token-chip-menu button:hover { background: #eee7d9; }
 .token-chip-menu button.is-selected { background: var(--acid); }
-.header-actions { display: flex; align-items: center; gap: 10px; }
+.header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .header-launch { height: 40px; padding: 0 16px; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; white-space: nowrap; }
-.nav-menu { position: relative; display: inline-block; }
-.nav-menu-trigger { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: inherit; cursor: pointer; }
-.nav-dropdown { position: absolute; left: 50%; top: 30px; z-index: 40; transform: translateX(-50%); min-width: 216px; padding: 6px; border: 2px solid var(--ink); border-radius: 13px; background: var(--paper); box-shadow: 5px 5px 0 var(--ink); }
-.nav-dropdown a { display: block; padding: 9px 11px; border-radius: 9px; color: inherit; text-decoration: none; }
-.nav-dropdown a:hover { background: var(--acid-soft); }
-.nav-dropdown strong { display: block; font-size: 12px; }
-.nav-dropdown small { color: var(--muted); font-size: 9px; }
 .identity-avatar { display: inline-grid; place-items: center; flex-shrink: 0; border: 1.5px solid var(--ink); border-radius: 50%; background-size: cover; background-position: center; overflow: hidden; }
 .identity-avatar svg { display: block; }
 .profile-menu { position: relative; }
@@ -612,8 +605,7 @@ button { color: inherit; }
 .wallet-option-name small { color: var(--muted); font-size: 9px; }
 .wallet-option-state { color: var(--muted); font-size: 9px; font-weight: 850; }
 .wallet-option-state.is-detected { color: #3f7d1e; }
-.wallet-mark { width: 26px; height: 26px; display: inline-grid; place-items: center; border: 1px solid var(--ink); border-radius: 50%; background: #eee7d9; font-size: 13px; }
-.wallet-button .wallet-mark { width: 18px; height: 18px; font-size: 10px; margin-left: 2px; }
+.wallet-mark { display: inline-block; flex-shrink: 0; border: 1.5px solid var(--ink); border-radius: 9px; background-color: #fff; background-size: cover; background-position: center; background-repeat: no-repeat; }
 .launch-modal { width: min(440px, 100%); text-align: center; }
 .launch-modal h2 { margin: 12px 0 0; }
 .launch-modal-art { display: flex; justify-content: center; }
