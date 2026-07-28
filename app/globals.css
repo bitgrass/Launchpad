@@ -758,6 +758,11 @@ a.token-meta-chip:hover, button.token-meta-chip:hover { background: var(--acid-s
 .trade-side.sell { background: #ffe2da; color: #9e301e; }
 .holder-table .activity-row { min-width: 650px; grid-template-columns: .5fr 1.5fr 1.5fr 1fr; }
 .activity-empty { min-height: 180px; padding: 40px; display: grid; place-items: center; border: 2px dashed #978f82; border-radius: 15px; color: var(--muted); background: rgba(255,253,247,.55); text-align: center; }
+.activity-pager { margin-top: 14px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.activity-pager span { color: var(--muted); font: 800 9px/1 "Courier New", monospace; text-transform: uppercase; }
+.activity-pager button { min-width: 84px; height: 34px; padding: 0 14px; border: 1.5px solid var(--ink); border-radius: 999px; background: var(--paper); font-size: 10px; font-weight: 850; cursor: pointer; box-shadow: 2px 2px 0 var(--ink); }
+.activity-pager button:hover:not(:disabled) { background: var(--acid-soft); }
+.activity-pager button:disabled { opacity: .35; cursor: default; box-shadow: none; }
 .analytics-overview { margin-top: 68px; padding: 34px; border: 2px solid var(--ink); border-radius: 22px; background: var(--paper); box-shadow: 7px 7px 0 var(--ink); }
 .analytics-overview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 30px; }
 .analytics-overview-head h1 { margin: 14px 0 8px; font-size: clamp(46px, 6vw, 78px); letter-spacing: -.07em; }

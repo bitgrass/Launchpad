@@ -48,6 +48,8 @@ function timeLabel(timestamp: number) {
   }).format(new Date(timestamp * 1000));
 }
 
+const PAGE_SIZE = 10;
+
 export function MarketActivity({
   token,
   symbol,
@@ -58,6 +60,7 @@ export function MarketActivity({
   const [tab, setTab] = useState<"trades" | "holders">("trades");
   const [data, setData] = useState<ActivityData | null>(null);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -84,7 +87,21 @@ export function MarketActivity({
     };
   }, [token]);
 
-  const recentTrades = [...(data?.points ?? [])].reverse().slice(0, 20);
+  const recentTrades = [...(data?.points ?? [])].reverse();
+  const holders = data?.holders ?? [];
+  const rowCount = tab === "trades" ? recentTrades.length : holders.length;
+  // Clamp instead of resetting so a 30-second refresh that adds rows does not
+  // yank the reader back to page one.
+  const pageCount = Math.max(1, Math.ceil(rowCount / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageStart = safePage * PAGE_SIZE;
+  const pagedTrades = recentTrades.slice(pageStart, pageStart + PAGE_SIZE);
+  const pagedHolders = holders.slice(pageStart, pageStart + PAGE_SIZE);
+
+  function switchTab(next: "trades" | "holders") {
+    setTab(next);
+    setPage(0);
+  }
 
   return (
     <section className="market-activity section-frame">
@@ -99,7 +116,7 @@ export function MarketActivity({
             role="tab"
             aria-selected={tab === "trades"}
             className={tab === "trades" ? "is-active" : ""}
-            onClick={() => setTab("trades")}
+            onClick={() => switchTab("trades")}
           >
             Recent trades
           </button>
@@ -108,7 +125,7 @@ export function MarketActivity({
             role="tab"
             aria-selected={tab === "holders"}
             className={tab === "holders" ? "is-active" : ""}
-            onClick={() => setTab("holders")}
+            onClick={() => switchTab("holders")}
           >
             Holders {data ? `(${data.holderCount})` : ""}
           </button>
@@ -126,7 +143,7 @@ export function MarketActivity({
               <span>Time</span><span>Side</span><span>Trader</span>
               <span>{symbol}</span><span>HOODIE</span><span>Price</span>
             </div>
-            {recentTrades.map((trade) => (
+            {pagedTrades.map((trade) => (
               <a
                 className="activity-row"
                 href={`https://robinhoodchain.blockscout.com/tx/${trade.transactionHash}`}
@@ -151,7 +168,7 @@ export function MarketActivity({
           <div className="activity-row activity-row-head">
             <span>Rank</span><span>Holder</span><span>Balance</span><span>Supply</span>
           </div>
-          {data.holders.map((holder, index) => (
+          {pagedHolders.map((holder, index) => (
             <a
               className="activity-row"
               href={`https://robinhoodchain.blockscout.com/address/${holder.address}`}
@@ -159,7 +176,7 @@ export function MarketActivity({
               rel="noreferrer"
               key={holder.address}
             >
-              <strong>#{index + 1}</strong>
+              <strong>#{pageStart + index + 1}</strong>
               {holder.label
                 ? (
                   <code>
@@ -176,6 +193,26 @@ export function MarketActivity({
       ) : (
         <div className="activity-empty">
           No wallet holders found after excluding the locked pool and protocol contracts.
+        </div>
+      )}
+
+      {!error && pageCount > 1 && (
+        <div className="activity-pager">
+          <span>Page {safePage + 1} of {pageCount}</span>
+          <button
+            type="button"
+            onClick={() => setPage(safePage - 1)}
+            disabled={safePage === 0}
+          >
+            ‹ Prev
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage(safePage + 1)}
+            disabled={safePage >= pageCount - 1}
+          >
+            Next ›
+          </button>
         </div>
       )}
     </section>
