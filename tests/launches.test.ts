@@ -10,6 +10,7 @@ import {
 import {
   createV4RegistryCaches,
   readV4MarketAnalytics,
+  shouldLogRejection,
 } from "../app/lib/launches-v4";
 import type { HoodiePadV4Market } from "../app/lib/market-v4";
 
@@ -381,4 +382,25 @@ test("books a loss and never lets a sell without inventory create profit", () =>
   ])[0];
   assert.equal(noInventory.realizedRaw, "0");
   assert.equal(noInventory.closes, 0);
+});
+
+test("reports a registry rejection once per asset until its reason changes", () => {
+  const reported = new Map<string, string>();
+  const asset = "0x4AbE75d071a9c339D7930f43bB47Fa0eEB023b58";
+  const reason = "V4 launch failed HoodiePad V2 invariant validation: Rehype starting time";
+
+  // First failure is reported; repeats on later refreshes stay quiet.
+  assert.equal(shouldLogRejection(reported, asset, reason), true);
+  assert.equal(shouldLogRejection(reported, asset, reason), false);
+  assert.equal(shouldLogRejection(reported, asset.toLowerCase(), reason), false);
+
+  // A different failure for the same asset is new information.
+  assert.equal(
+    shouldLogRejection(reported, asset, "V4 launch failed HoodiePad V2 invariant validation: Locked pool status"),
+    true,
+  );
+
+  // Recovery clears the memo, so a future failure reports again.
+  reported.delete(asset.toLowerCase());
+  assert.equal(shouldLogRejection(reported, asset, reason), true);
 });

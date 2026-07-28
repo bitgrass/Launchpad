@@ -107,6 +107,26 @@ export function resetV4RegistryCaches() {
   globalRegistryCaches = createV4RegistryCaches();
   cachedV4Launches = undefined;
   persistedCachesLoaded = undefined;
+  reportedRejections.clear();
+}
+
+// A Create event from a different initializer (every legacy V1 launch) is an
+// expected, permanent skip — not a fault worth reporting.
+class NonCandidateError extends Error {}
+
+// Remembers the last reported failure per asset so a market that keeps
+// failing for the same reason is logged once, not on every refresh.
+const reportedRejections = new Map<string, string>();
+
+export function shouldLogRejection(
+  reported: Map<string, string>,
+  asset: string,
+  reason: string,
+) {
+  const key = asset.toLowerCase();
+  if (reported.get(key) === reason) return false;
+  reported.set(key, reason);
+  return true;
 }
 
 function absolute(value: bigint) {
@@ -613,7 +633,9 @@ async function loadV4Launches(
       args.initializer.toLowerCase() !==
         product.contracts.dopplerHookInitializer.toLowerCase()
     ) {
-      throw new Error("Airlock Create event is not a HoodiePad V2 candidate");
+      throw new NonCandidateError(
+        "Airlock Create event is not a HoodiePad V2 candidate",
+      );
     }
     // The launch sender and block timestamp never change; memoize them so a
     // refresh costs no per-launch receipt or block lookups.
@@ -662,12 +684,20 @@ async function loadV4Launches(
   }));
 
   candidates.forEach((candidate, index) => {
-    if (candidate.status !== "rejected") return;
     const args = logs[index]?.args as { asset?: Address } | undefined;
     const asset = args?.asset ?? "unknown";
+    if (candidate.status !== "rejected") {
+      // A market that recovers should report again if it ever fails later.
+      reportedRejections.delete(asset.toLowerCase());
+      return;
+    }
+    // Legacy V1 launches are rejected by design on every single refresh.
+    // Logging them would bury the failures that actually need attention.
+    if (candidate.reason instanceof NonCandidateError) return;
     const reason = candidate.reason instanceof Error
       ? candidate.reason.message.split("\n")[0]
       : "Unknown V4 registry validation error";
+    if (!shouldLogRejection(reportedRejections, asset, reason)) return;
     console.warn(
       `[HoodiePad V4 registry] Rejected ${asset}: ${reason}`,
     );
