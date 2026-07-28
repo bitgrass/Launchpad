@@ -128,7 +128,7 @@ export function LeaderboardTables({
             className={tab === "creators" ? "is-active" : ""}
             onClick={() => setTab("creators")}
           >
-            <span aria-hidden="true">🎨</span> Creators
+            <span aria-hidden="true">👨‍💻</span> Devs
           </button>
         </div>
         <button
@@ -247,7 +247,7 @@ export function LeaderboardTables({
               <thead>
                 <tr>
                   <th className="is-rank">Rank</th>
-                  <th>Creator</th>
+                  <th>Dev</th>
                   <th className="is-number">Fees earned</th>
                   <th className="is-number">Volume</th>
                   <th className="is-number">Markets</th>
@@ -292,7 +292,7 @@ export function LeaderboardTables({
           ) : (
             <div className="live-empty-state">
               <strong>No validated markets yet.</strong>
-              <p>Launch a token to open the creator board.</p>
+              <p>Launch a token to open the dev board.</p>
             </div>
           )}
         </div>

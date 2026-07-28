@@ -54,7 +54,7 @@ export default async function Home() {
             <Image src="/hoodie-logo.jpg" alt="$HOODIE character" width={400} height={400} priority unoptimized />
             <div className="hero-logo-caption"><strong>80%</strong><span>CREATOR FEES</span></div>
           </div>
-          <div className="art-tag tag-left">NO PRESALE</div>
+          <div className="art-tag tag-left">ZERO LAUNCH FEE</div>
           <div className="art-tag tag-right">PAIRED W/ $HOODIE</div>
           <div className="curve-line" />
         </div>

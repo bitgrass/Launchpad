@@ -35,7 +35,7 @@ export default async function LeaderboardPage() {
             </p>
             <div className="leaderboard-banner-facts">
               <span><strong>{traders.length}</strong> ranked wallets</span>
-              <span><strong>{creators.length}</strong> creators earning</span>
+              <span><strong>{creators.length}</strong> devs earning</span>
               <span><strong>{launches.length}</strong> live markets</span>
             </div>
           </div>
