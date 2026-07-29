@@ -404,7 +404,7 @@ export function LaunchWizard() {
             ) : (
               <div className="wallet-connect-panel">
                 <strong>Connect a wallet to continue</strong>
-                <p>MetaMask or Phantom. HoodiePad switches it to Robinhood Chain and uses that account as the creator beneficiary.</p>
+                <p>MetaMask. HoodiePad switches it to Robinhood Chain and uses that account as the creator beneficiary.</p>
                 <WalletButton compact />
               </div>
             )}

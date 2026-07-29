@@ -20,6 +20,10 @@ declare global {
 
 export type WalletId = "metamask" | "phantom";
 
+// Phantom stays out of this list until it supports dapp connections on
+// Robinhood Chain: its provider connects and switches chains, but signing any
+// dapp transaction fails inside the wallet. The detection and provider
+// plumbing below is kept so restoring Phantom is a one-entry change.
 export const WALLETS: Array<{
   id: WalletId;
   name: string;
@@ -31,12 +35,6 @@ export const WALLETS: Array<{
     name: "MetaMask",
     hint: "Browser extension",
     installUrl: "https://metamask.io/download/",
-  },
-  {
-    id: "phantom",
-    name: "Phantom",
-    hint: "Ethereum mode",
-    installUrl: "https://phantom.app/download",
   },
 ];
 
@@ -115,8 +113,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<WalletContextValue["status"]>("idle");
 
   useEffect(() => {
-    const remembered = window.localStorage.getItem(STORAGE_KEY) as WalletId | null;
-    const candidate: WalletId = remembered === "phantom" ? "phantom" : "metamask";
+    const candidate: WalletId = "metamask";
     const provider = providerFor(candidate);
     if (!provider) return;
 

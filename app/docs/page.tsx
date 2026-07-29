@@ -519,7 +519,12 @@ const slot0 = await client.readContract({
               </dd>
 
               <dt>Which wallets are supported?</dt>
-              <dd>MetaMask and Phantom, both in Ethereum mode on chain {product.network.chainId}.</dd>
+              <dd>
+                MetaMask, on chain {product.network.chainId}. Phantom can hold
+                Robinhood Chain assets but does not yet support dapp
+                connections on the chain, so it cannot sign HoodiePad
+                transactions.
+              </dd>
 
               <dt>Do you have a token?</dt>
               <dd>
