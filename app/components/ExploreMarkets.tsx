@@ -245,6 +245,7 @@ export function ExploreMarkets({
                   <th className="is-number is-sortable" onClick={() => headerSort("mcap")}>
                     MCap{sortIndicator("mcap")}
                   </th>
+                  <th className="is-number">Curve</th>
                   <th className="is-number">Holders</th>
                 </tr>
               </thead>
@@ -308,6 +309,20 @@ export function ExploreMarkets({
                             ? usdCompact(mcapUsd)
                             : hoodieCompact(market.fdvHoodieNumber)}
                         </strong>
+                      </td>
+                      <td className="is-number">
+                        {market.graduationPercent === null ? (
+                          "—"
+                        ) : market.graduationPercent >= 100 ? (
+                          <em className="mini-curve-grad">GRAD</em>
+                        ) : (
+                          <span className="mini-curve" title={`${market.graduationPercent.toFixed(1)}% to graduation`}>
+                            <span className="mini-curve-bar">
+                              <i style={{ width: `${market.graduationPercent}%` }} />
+                            </span>
+                            <small>{market.graduationPercent.toFixed(market.graduationPercent < 10 ? 1 : 0)}%</small>
+                          </span>
+                        )}
                       </td>
                       <td className="is-number">{market.holderCount.toLocaleString("en-US")}</td>
                     </tr>

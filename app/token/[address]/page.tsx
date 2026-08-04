@@ -5,10 +5,10 @@ import { AppShell } from "../../components/AppShell";
 import { MarketActivity } from "../../components/MarketActivity";
 import { MarketChart } from "../../components/MarketChart";
 import { SwapPanel } from "../../components/SwapPanel";
-import { CurveProgress } from "../../components/CurveProgress";
+import { BondingCurveCard } from "../../components/BondingCurveCard";
 import { TokenMetaBar } from "../../components/TokenMetaBar";
 import { readDisplayPrices } from "../../lib/display-prices";
-import { type MarketAnalytics } from "../../lib/launches";
+import { hoodieNetRaisedRaw, type MarketAnalytics } from "../../lib/launches";
 import { type HoodiePadMarket } from "../../lib/market";
 import { readVersionedHoodiePadMarket } from "../../lib/market-v4";
 import { PUBLIC_V4_MARKET_VERSION } from "../../lib/market-version";
@@ -135,15 +135,27 @@ export default async function TokenPage({
   const volumeUsdLabel = analytics && prices.hoodieUsd !== null && volumeHoodieNumber !== null
     ? formatUsdCompact(volumeHoodieNumber * prices.hoodieUsd) ?? undefined
     : undefined;
-  // Net HOODIE the pool has accumulated: buys pay HOODIE in (minus the 1% LP
-  // fee routed to beneficiaries), sells draw the full HOODIE amount back out.
   const hoodieRaisedRaw = analytics
-    ? analytics.points.reduce((total, point) => {
-        const volume = BigInt(point.hoodieVolumeRaw);
-        return point.side === "buy"
-          ? total + volume - (BigInt(point.hoodieFeeVolumeRaw) * BigInt(market.poolFee)) / 1_000_000n
-          : total - volume;
-      }, 0n).toString()
+    ? hoodieNetRaisedRaw(analytics.points, market.poolFee).toString()
+    : null;
+  // All-time-high FDV for the pump-style chart readout: highest traded price
+  // (or the live spot if it exceeds every trade) at today's HOODIE/USD rate.
+  const athPriceHoodie = analytics && analytics.points.length > 0
+    ? Math.max(
+        spotHoodie ?? 0,
+        ...analytics.points.map((point) => point.price).filter(Number.isFinite),
+      )
+    : spotHoodie;
+  const athFdvUsd =
+    athPriceHoodie !== null && prices.hoodieUsd !== null && Number.isFinite(supply)
+      ? athPriceHoodie * prices.hoodieUsd * supply
+      : null;
+  const athPercent = fdvUsd !== null && athFdvUsd !== null && athFdvUsd > 0
+    ? Math.min(100, (fdvUsd / athFdvUsd) * 100)
+    : null;
+  const change24h = analytics?.changePercent24h ?? null;
+  const change24hUsd = change24h !== null && fdvUsd !== null && change24h > -100
+    ? fdvUsd - fdvUsd / (1 + change24h / 100)
     : null;
 
   return (
@@ -245,10 +257,24 @@ export default async function TokenPage({
               <strong>{priceUsdLabel ?? `${market.hoodiePerToken} HOODIE`}</strong>
               {priceUsdLabel && <small>{market.hoodiePerToken} HOODIE</small>}
             </div>
-            <div>
+            <div className="mcap-block">
               <span>Market cap (FDV)</span>
               <strong>{fdvUsdLabel ?? `${market.fdvHoodie} HOODIE`}</strong>
               {fdvUsdLabel && <small>{market.fdvHoodie} HOODIE</small>}
+              {change24h !== null && (
+                <em className={`mcap-change ${change24h >= 0 ? "is-up" : "is-down"}`}>
+                  {change24hUsd !== null && `${change24hUsd >= 0 ? "+" : "-"}${formatUsdCompact(Math.abs(change24hUsd))} `}
+                  ({change24h >= 0 ? "+" : ""}{change24h.toFixed(2)}%) 24hr
+                </em>
+              )}
+              {athPercent !== null && (
+                <span className="ath-progress">
+                  <span className="ath-bar" role="img" aria-label={`${athPercent.toFixed(0)} percent of all-time high`}>
+                    <i style={{ width: `${athPercent}%` }} />
+                  </span>
+                  <small>ATH {formatUsdCompact(athFdvUsd)}</small>
+                </span>
+              )}
             </div>
             <span className="live-chain-chip">
               {!isV4
@@ -258,7 +284,6 @@ export default async function TokenPage({
                   : "POOL READY"}
             </span>
           </div>
-          {isV4 && <CurveProgress fdvUsd={fdvUsd} hoodieRaisedRaw={hoodieRaisedRaw} />}
           <MarketChart token={market.address} initialPrice={market.hoodiePerToken} />
           <div className="chart-pool-links">
             <a href={explorerPool} target="_blank" rel="noreferrer">
@@ -277,15 +302,21 @@ export default async function TokenPage({
         </div>
 
         {isV4 ? (
-          <SwapPanel
-            token={market.address}
-            symbol={market.symbol}
-            poolUrl={uniswapPool}
-            marketVersion={market.version}
-            tradingEnabled={v4TradingEnabled}
-            imageUrl={market.imageUrl}
-            spotPrice={market.hoodiePerToken}
-          />
+          <div className="trade-column">
+            <BondingCurveCard
+              hoodieRaisedRaw={hoodieRaisedRaw}
+              hoodieUsd={prices.hoodieUsd}
+            />
+            <SwapPanel
+              token={market.address}
+              symbol={market.symbol}
+              poolUrl={uniswapPool}
+              marketVersion={market.version}
+              tradingEnabled={v4TradingEnabled}
+              imageUrl={market.imageUrl}
+              spotPrice={market.hoodiePerToken}
+            />
+          </div>
         ) : (
           <aside className="trade-panel">
             <span className="preview-label">HISTORICAL V3 MARKET</span>

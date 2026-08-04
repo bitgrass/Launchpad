@@ -9,10 +9,12 @@ import {
   type Hex,
 } from "viem";
 import product from "../../config/hoodiepad-v1.json";
+import graduation from "../../config/hoodie-graduation.json";
 import {
   readHoodiePadMarket,
   type HoodiePadMarket,
 } from "./market";
+import { PUBLIC_V4_MARKET_VERSION } from "./market-version";
 import { createRobinhoodPublicClient } from "./protocol";
 
 type RobinhoodClient = ReturnType<typeof createRobinhoodPublicClient>;
@@ -181,6 +183,32 @@ export type MarketAnalytics = {
   traders: TraderMarketStats[];
 };
 
+export const GRADUATION_HOODIE_TOKENS = Number(
+  graduation.hoodieNetPoolThresholdTokens,
+);
+
+// Net HOODIE the pool has accumulated: buys pay HOODIE in minus the LP fee
+// routed to beneficiaries; sells draw the full HOODIE amount back out.
+// Validated against the live BABY pool reserve to within 0.1% (ADR 0014).
+export function hoodieNetRaisedRaw(
+  points: MarketSwapPoint[],
+  poolFee: number,
+) {
+  return points.reduce((total, point) => {
+    const volume = BigInt(point.hoodieVolumeRaw);
+    return point.side === "buy"
+      ? total + volume -
+          (BigInt(point.hoodieFeeVolumeRaw) * BigInt(poolFee)) / 1_000_000n
+      : total - volume;
+  }, 0n);
+}
+
+export function graduationPercentFromRaised(raisedRaw: bigint) {
+  const raised = Number(raisedRaw) / 1e18;
+  if (!Number.isFinite(raised)) return null;
+  return Math.min(100, Math.max(0, (raised / GRADUATION_HOODIE_TOKENS) * 100));
+}
+
 // Price change over the trailing 24h window: latest trade price versus the
 // last trade at or before the window start (a market with no trades inside
 // the window reads 0% — its price has not moved).
@@ -241,6 +269,9 @@ export type HoodiePadMarketSummary = {
   changePercent24h: number | null;
   holderCount: number;
   launchTimestamp: number;
+  // Bonding-curve progress toward the 420M HOODIE graduation milestone
+  // (ADR 0014); null for legacy V3 markets.
+  graduationPercent: number | null;
 };
 
 type DecodedChainEvent = {
@@ -677,6 +708,11 @@ export function summarizeHoodiePadLaunches(
       changePercent24h: market.analytics.changePercent24h,
       holderCount: market.analytics.holderCount,
       launchTimestamp: market.launchTimestamp,
+      graduationPercent: market.version === PUBLIC_V4_MARKET_VERSION
+        ? graduationPercentFromRaised(
+            hoodieNetRaisedRaw(market.analytics.points, market.poolFee),
+          )
+        : null,
     };
   });
 }

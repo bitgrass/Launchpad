@@ -75,7 +75,7 @@ test("keeps legacy V3 token pages read-only and out of V2 trading", async () => 
   );
   assert.match(source, /Legacy V3 · historical/);
   assert.match(source, /excluded from discovery, analytics,\s+and in-app trading/);
-  assert.match(source, /isV4 \? \(\s+<SwapPanel/);
+  assert.match(source, /isV4 \? \(\s+<div className="trade-column">\s+<BondingCurveCard[\s\S]+?<SwapPanel/);
   assert.match(source, /HISTORICAL V3 MARKET/);
 });
 
