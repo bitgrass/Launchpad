@@ -1,7 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
 import { AppShell } from "./components/AppShell";
-import { MarketCard } from "./components/MarketCard";
+import { HomeBoard } from "./components/HomeBoard";
+import { readDisplayPrices } from "./lib/display-prices";
 import {
   readHoodiePadLaunches,
   summarizeHoodiePadLaunches,
@@ -9,84 +9,99 @@ import {
 
 export const revalidate = 0;
 
+function usdCompact(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return null;
+  return `$${new Intl.NumberFormat("en-US", {
+    notation: value >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits: 2,
+  }).format(value)}`;
+}
+
 export default async function Home() {
-  const launches = await readHoodiePadLaunches().catch(() => []);
-  const markets = summarizeHoodiePadLaunches(launches).slice(0, 3);
+  const [launches, prices] = await Promise.all([
+    readHoodiePadLaunches().catch(() => []),
+    readDisplayPrices().catch(() => ({ ethUsd: null, hoodieUsd: null })),
+  ]);
+  const markets = summarizeHoodiePadLaunches(launches);
+
+  const totalVolumeHoodie = markets.reduce(
+    (sum, market) => sum + market.volumeHoodieNumber,
+    0,
+  );
+  const volume24hHoodie = markets.reduce(
+    (sum, market) => sum + market.volume24hHoodieNumber,
+    0,
+  );
+  const totalTrades = markets.reduce((sum, market) => sum + market.txns, 0);
+  const totalVolumeUsd = prices.hoodieUsd !== null
+    ? usdCompact(totalVolumeHoodie * prices.hoodieUsd)
+    : null;
+  const volume24hUsd = prices.hoodieUsd !== null
+    ? usdCompact(volume24hHoodie * prices.hoodieUsd)
+    : null;
 
   return (
     <AppShell>
-      <section className="hero section-frame">
-        <div className="hero-copy">
+      <section className="home-hero section-frame">
+        <div className="home-hero-copy">
           <p className="eyebrow"><span /> Built on Robinhood Chain</p>
           <h1>
-            Launch it.
-            <br />
-            <span>The hood stays on.</span>
+            Launch it. <span>The hood stays on.</span>
           </h1>
           <p className="hero-lede">
-            Fixed-supply token markets paired with $HOODIE. No presale, no free
-            creator bag, no migration—and creators keep 80% of pool fees.
+            Fixed-supply markets paired with $HOODIE. Launches open at $2,500
+            on the bonding curve — no presale, no free creator bag, no
+            migration — and creators keep 80% of pool fees.
           </p>
-          <div className="hero-actions">
-            <Link className="button button-primary" href="/launch">
-              Launch a token <span>↗</span>
-            </Link>
-            <Link className="button button-secondary" href="/explore">
-              Explore markets
-            </Link>
-          </div>
-          <div className="contract-strip">
-            <span>Canonical pair token</span>
-            <code>0xC72c…2Ba3</code>
-            <a
-              href="https://robinhoodchain.blockscout.com/address/0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Verify ↗
-            </a>
-          </div>
         </div>
-        <div className="hero-art" aria-label="HoodiePad launch market illustration">
-          <div className="orbit orbit-one" />
-          <div className="orbit orbit-two" />
-          <div className="hero-logo-card">
-            <Image src="/hoodie-logo.jpg" alt="$HOODIE character" width={400} height={400} priority unoptimized />
-            <div className="hero-logo-caption"><strong>80%</strong><span>CREATOR FEES</span></div>
-          </div>
-          <div className="art-tag tag-left">ZERO LAUNCH FEE</div>
-          <div className="art-tag tag-right">PAIRED W/ $HOODIE</div>
-          <div className="curve-line" />
+        <div className="home-hero-actions">
+          <Link className="button button-primary" href="/launch">
+            Launch a token <span>↗</span>
+          </Link>
+          <Link className="button button-secondary" href="/explore">
+            Explore markets
+          </Link>
+          <a
+            className="contract-strip"
+            href="https://robinhoodchain.blockscout.com/address/0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span>$HOODIE</span> <code>0xC72c…2Ba3</code> ↗
+          </a>
         </div>
       </section>
 
-      <section className="stats-bar" aria-label="HoodiePad fixed launch rules">
-        <div><strong>1B</strong><span>Fixed supply</span></div>
-        <div><strong>1%</strong><span>Pool fee</span></div>
-        <div><strong>80%</strong><span>To creators</span></div>
-        <div><strong>2%</strong><span>Max wallet · 24h</span></div>
-        <div><strong>0</strong><span>Free creator tokens</span></div>
-      </section>
-
-      <section className="market-section section-frame">
-        <div className="section-heading">
+      <section className="home-stats" aria-label="Live protocol stats and launch rules">
+        <div className="home-stats-live">
           <div>
-            <p className="eyebrow"><span /> Fresh from the hood</p>
-            <h2>Markets taking shape.</h2>
+            <strong>{markets.length.toLocaleString("en-US")}</strong>
+            <span>Tokens launched</span>
           </div>
-          <Link href="/explore">View all markets ↗</Link>
+          <div>
+            <strong>{totalVolumeUsd ?? `${Math.round(totalVolumeHoodie).toLocaleString("en-US")} HOODIE`}</strong>
+            <span>Total volume</span>
+          </div>
+          <div>
+            <strong>{volume24hUsd ?? `${Math.round(volume24hHoodie).toLocaleString("en-US")} HOODIE`}</strong>
+            <span>24h volume</span>
+          </div>
+          <div>
+            <strong>{totalTrades.toLocaleString("en-US")}</strong>
+            <span>Trades</span>
+          </div>
         </div>
-        {markets.length > 0 ? (
-          <div className="market-grid">
-            {markets.map((market) => <MarketCard key={market.address} {...market} />)}
-          </div>
-        ) : (
-          <div className="live-empty-state">
-            <strong>No validated HoodiePad launches found yet.</strong>
-            <p>Validated V4 markets appear here automatically after their Airlock launch confirms.</p>
-          </div>
-        )}
+        <div className="home-stats-rules">
+          <span>$2.5K OPEN</span>
+          <span>1B SUPPLY</span>
+          <span>1% FEE</span>
+          <span>80% TO CREATORS</span>
+          <span>0 LAUNCH FEE</span>
+          <span>2% MAX WALLET · 24H</span>
+        </div>
       </section>
+
+      <HomeBoard markets={markets} hoodieUsd={prices.hoodieUsd} />
 
       <section className="how-section section-frame">
         <div className="section-heading how-heading">
@@ -110,7 +125,7 @@ export default async function Home() {
             <span className="step-number">02</span>
             <div className="step-icon">↗</div>
             <h3>Open the market</h3>
-            <p>One transaction creates the 1B supply and locked V4 CHILD/HOODIE pool.</p>
+            <p>One transaction creates the 1B supply and locked V4 CHILD/HOODIE pool, opening at $2,500 on the bonding curve.</p>
           </article>
           <article>
             <span className="step-number">03</span>

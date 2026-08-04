@@ -13,11 +13,16 @@ export type MarketCardProps = {
   active: boolean;
   launchBlock: string;
   tone: "green" | "peach" | "blue" | "violet";
+  // Bonding-curve progress toward the 420M HOODIE graduation milestone
+  // (ADR 0014); omit or null to hide the bar (legacy V3 markets).
+  graduationPercent?: number | null;
+  ageLabel?: string;
 };
 
 export function MarketCard(props: MarketCardProps) {
   const positive = !props.change.startsWith("-");
   const creator = `${props.creator.slice(0, 8)}…${props.creator.slice(-6)}`;
+  const percent = props.graduationPercent ?? null;
   return (
     <Link className="market-card" href={`/token/${props.address}`}>
       <div
@@ -39,7 +44,7 @@ export function MarketCard(props: MarketCardProps) {
       <dl className="market-stats">
         <div>
           <dt>Price</dt>
-          <dd>{props.price} HOODIE</dd>
+          <dd>{props.price}</dd>
         </div>
         <div>
           <dt>Market cap (FDV)</dt>
@@ -47,10 +52,25 @@ export function MarketCard(props: MarketCardProps) {
         </div>
       </dl>
       <p className="market-card-volume">Volume {props.volume}</p>
+      {percent !== null && (
+        percent >= 100 ? (
+          <div className="market-card-curve is-graduated">
+            <em className="mini-curve-grad">GRADUATED</em>
+            <small>Pool stays locked — trading continues</small>
+          </div>
+        ) : (
+          <div className="market-card-curve">
+            <span className="mini-curve-bar">
+              <i style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
+            </span>
+            <small>{percent.toFixed(percent < 10 ? 1 : 0)}% to graduation</small>
+          </div>
+        )
+      )}
       <div className="market-live-row">
         <span className={`market-live-dot${props.active ? " is-active" : ""}`} />
         <strong>{props.active ? "Market active" : "Awaiting first trade"}</strong>
-        <span>Block {props.launchBlock}</span>
+        <span>{props.ageLabel ?? `Block ${props.launchBlock}`}</span>
       </div>
       <p className="creator-line">by {creator}</p>
     </Link>
