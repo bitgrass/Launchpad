@@ -135,6 +135,16 @@ export default async function TokenPage({
   const volumeUsdLabel = analytics && prices.hoodieUsd !== null && volumeHoodieNumber !== null
     ? formatUsdCompact(volumeHoodieNumber * prices.hoodieUsd) ?? undefined
     : undefined;
+  // Net HOODIE the pool has accumulated: buys pay HOODIE in (minus the 1% LP
+  // fee routed to beneficiaries), sells draw the full HOODIE amount back out.
+  const hoodieRaisedRaw = analytics
+    ? analytics.points.reduce((total, point) => {
+        const volume = BigInt(point.hoodieVolumeRaw);
+        return point.side === "buy"
+          ? total + volume - (BigInt(point.hoodieFeeVolumeRaw) * BigInt(market.poolFee)) / 1_000_000n
+          : total - volume;
+      }, 0n).toString()
+    : null;
 
   return (
     <AppShell>
@@ -248,7 +258,7 @@ export default async function TokenPage({
                   : "POOL READY"}
             </span>
           </div>
-          {isV4 && <CurveProgress fdvUsd={fdvUsd} />}
+          {isV4 && <CurveProgress fdvUsd={fdvUsd} hoodieRaisedRaw={hoodieRaisedRaw} />}
           <MarketChart token={market.address} initialPrice={market.hoodiePerToken} />
           <div className="chart-pool-links">
             <a href={explorerPool} target="_blank" rel="noreferrer">

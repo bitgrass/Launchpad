@@ -1,6 +1,6 @@
 import Link from "next/link";
 import crown from "../../config/hoodie-crown.json";
-import curve from "../../config/hoodie-v4-curve-v1.json";
+import curve from "../../config/hoodie-v4-curve-v2.json";
 import product from "../../config/hoodiepad-v2.json";
 import { AppShell } from "../components/AppShell";
 import { TRADER_SCORE_WEIGHTS } from "../lib/leaderboard";
@@ -149,8 +149,8 @@ export default function DocsPage() {
                 <p>
                   The Airlock deploys the token, mints the multicurve liquidity
                   and locks it. The market is tradeable immediately from its
-                  token page — there is no bonding-curve phase and no graduation
-                  event to wait for.
+                  token page — nothing is gated behind graduation, which is a
+                  display milestone rather than a migration event.
                 </p>
               </li>
             </ol>
@@ -194,9 +194,10 @@ export default function DocsPage() {
           <section id="pricing">
             <h2>Trading and pricing</h2>
             <p>
-              Liquidity is distributed across three market-cap segments rather
-              than a single range. Early buyers move price quickly; depth grows
-              as the market cap climbs.
+              Liquidity is distributed across {curve.curves.length} market-cap
+              segments rather than a single range. The first segment is a thin
+              discovery range, so early buys move price quickly; depth grows as
+              the market cap climbs.
             </p>
             <div className="docs-table-wrap">
               <table className="docs-table">
@@ -524,6 +525,14 @@ const slot0 = await client.readContract({
                 Robinhood Chain assets but does not yet support dapp
                 connections on the chain, so it cannot sign HoodiePad
                 transactions.
+              </dd>
+
+              <dt>What does graduation mean?</dt>
+              <dd>
+                A market graduates when its pool has accumulated 420,000,000
+                HOODIE net of sells. It is a display milestone only: the pool
+                is locked forever, nothing migrates, and trading continues in
+                the same canonical pool.
               </dd>
 
               <dt>Do you have a token?</dt>

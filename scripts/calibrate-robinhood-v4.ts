@@ -439,7 +439,7 @@ async function startFork() {
   });
   const client = createPublicClient({
     chain: robinhood,
-    transport: http(LOCAL_RPC_URL),
+    transport: http(LOCAL_RPC_URL, { timeout: 180_000 }),
   });
   const deadline = Date.now() + 60_000;
   while (Date.now() < deadline) {
@@ -676,19 +676,19 @@ async function main() {
     const testClient = createTestClient({
       chain: robinhood,
       mode: "anvil",
-      transport: http(LOCAL_RPC_URL),
+      transport: http(LOCAL_RPC_URL, { timeout: 180_000 }),
     });
     const creator = privateKeyToAccount(LOCAL_CREATOR_PRIVATE_KEY);
     const buyer = privateKeyToAccount(LOCAL_BUYER_PRIVATE_KEY);
     const creatorWallet = createWalletClient({
       account: creator,
       chain: robinhood,
-      transport: http(LOCAL_RPC_URL),
+      transport: http(LOCAL_RPC_URL, { timeout: 180_000 }),
     });
     const buyerWallet = createWalletClient({
       account: buyer,
       chain: robinhood,
-      transport: http(LOCAL_RPC_URL),
+      transport: http(LOCAL_RPC_URL, { timeout: 180_000 }),
     });
     await testClient.setBalance({
       address: creator.address,
@@ -926,7 +926,8 @@ async function main() {
     addCheck(
       checks,
       "opening-fdv-target",
-      targetFdv === 30_000n,
+      // The exact reviewed opening FDV for HOODIE_CURVE_V2 (ADR 0014).
+      targetFdv === 2_500n,
       `$${targetFdv}`,
     );
     addCheck(
@@ -1083,7 +1084,7 @@ async function main() {
     const poolManagerWallet = createWalletClient({
       account: poolManager,
       chain: robinhood,
-      transport: http(LOCAL_RPC_URL),
+      transport: http(LOCAL_RPC_URL, { timeout: 180_000 }),
     });
     const fundingHash = await poolManagerWallet.writeContract({
       account: poolManager,
@@ -1559,7 +1560,7 @@ async function main() {
       const wallet = createWalletClient({
         account: beneficiary,
         chain: robinhood,
-        transport: http(LOCAL_RPC_URL),
+        transport: http(LOCAL_RPC_URL, { timeout: 180_000 }),
       });
       await collectForBeneficiary({
         client: publicClient,

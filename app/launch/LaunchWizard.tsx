@@ -4,6 +4,11 @@ import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { WalletButton } from "../components/WalletButton";
 import { useWallet } from "../components/WalletProvider";
+import product from "../../config/hoodiepad-v2.json";
+
+const OPENING_MARKET_CAP = `$${Number(
+  product.market.targetOpeningFdvUsd,
+).toLocaleString("en-US")}`;
 
 type Draft = {
   name: string;
@@ -437,7 +442,7 @@ export function LaunchWizard() {
             <div className="review-rules">
               <div><span>Network</span><strong>Robinhood Chain</strong></div>
               <div><span>Canonical pair</span><strong>${draft.symbol} / HOODIE</strong></div>
-              <div><span>Opening market cap</span><strong>$30,000</strong></div>
+              <div><span>Opening market cap</span><strong>{OPENING_MARKET_CAP}</strong></div>
               <div><span>Market allocation</span><strong>100% · no presale</strong></div>
               <div><span>Trading fee</span><strong>1.00%</strong></div>
               <div><span>Your share of fees</span><strong>80%</strong></div>
@@ -524,7 +529,7 @@ export function LaunchWizard() {
             <dl className="launch-modal-facts">
               <div><dt>Token</dt><dd>{draft.name} (${draft.symbol})</dd></div>
               <div><dt>Supply</dt><dd>1,000,000,000 · 100% to market</dd></div>
-              <div><dt>Opening market cap</dt><dd>$30,000</dd></div>
+              <div><dt>Opening market cap</dt><dd>{OPENING_MARKET_CAP}</dd></div>
               <div><dt>Launch fee</dt><dd>None · network gas only</dd></div>
               <div><dt>Trading fee split</dt><dd>80% creator / 15% ecosystem / 5% protocol</dd></div>
               <div><dt>Liquidity</dt><dd>Locked · no migration</dd></div>

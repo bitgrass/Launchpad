@@ -64,8 +64,9 @@ new ADR and fresh Robinhood fork tests.
 | Network | Robinhood Chain mainnet, chain ID `4663` |
 | Canonical quote | HOODIE, `0xC72c01AAB5f5678dc1d6f5C6d2B417d91D402Ba3` |
 | Launch mechanism | Canonical Doppler V4 Multicurve through `DopplerHookInitializer` |
-| Curve | `HOODIE_CURVE_V1` from `config/hoodie-v4-curve-v1.json` |
-| Target opening FDV | Exactly `$30,000`, accepted within `2.5%` after initialization |
+| Curve | `HOODIE_CURVE_V2` from `config/hoodie-v4-curve-v2.json` (ADR 0014; `HOODIE_CURVE_V1` retained for markets launched under it) |
+| Target opening FDV | Exactly `$2,500`, accepted within `2.5%` after initialization (ADR 0014) |
+| Graduation | UI milestone only at `420,000,000` HOODIE net pool accumulation; never migrates (ADR 0014) |
 | Supply | Exactly 1,000,000,000 tokens; 100% on the market |
 | Creator token allocation | 0 |
 | Vesting / presale / airdrop / dev buy | None |

@@ -1,60 +1,64 @@
-import curve from "../../config/hoodie-v4-curve-v1.json";
+import curve from "../../config/hoodie-v4-curve-v2.json";
+import graduation from "../../config/hoodie-graduation.json";
 
-// The multicurve is three market-cap segments. Showing where a market sits
-// inside them gives the same "chase" readout a graduation bar would, without
-// implying a graduation event — HoodiePad pools stay locked forever.
-export function CurveProgress({ fdvUsd }: { fdvUsd: number | null }) {
-  if (fdvUsd === null || !Number.isFinite(fdvUsd) || fdvUsd <= 0) return null;
+// Graduation is a UI milestone only (ADR 0014): the pool is locked forever
+// and nothing migrates when the threshold is reached.
+const GRADUATION_HOODIE = Number(graduation.hoodieNetPoolThresholdTokens);
 
-  const segments = curve.curves.map((item, index) => ({
-    index,
-    start: Number(item.marketCap.start),
-    end: item.marketCap.end === "max" ? null : Number(item.marketCap.end),
-  }));
+const compact = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 
-  const active = segments.find((segment) =>
-    segment.end === null ? fdvUsd >= segment.start : fdvUsd < segment.end,
-  ) ?? segments[segments.length - 1];
+export function CurveProgress({
+  fdvUsd,
+  hoodieRaisedRaw,
+}: {
+  fdvUsd: number | null;
+  hoodieRaisedRaw: string | null;
+}) {
+  if (hoodieRaisedRaw === null) return null;
+  const raised = Math.max(0, Number(hoodieRaisedRaw) / 1e18);
+  if (!Number.isFinite(raised)) return null;
 
-  const percent = active.end === null
-    ? 100
-    : Math.max(
-        0,
-        Math.min(100, ((fdvUsd - active.start) / (active.end - active.start)) * 100),
+  const percent = Math.min(100, (raised / GRADUATION_HOODIE) * 100);
+  const graduated = raised >= GRADUATION_HOODIE;
+  const thresholdLabel = `${compact.format(GRADUATION_HOODIE)} HOODIE`;
+
+  const activeSegment = fdvUsd === null || !Number.isFinite(fdvUsd) || fdvUsd <= 0
+    ? -1
+    : curve.curves.findIndex((item) =>
+        item.marketCap.end === "max"
+          ? fdvUsd >= Number(item.marketCap.start)
+          : fdvUsd < Number(item.marketCap.end),
       );
 
-  const target = active.end === null
-    ? "final segment"
-    : `$${new Intl.NumberFormat("en-US", {
-        notation: "compact",
-        maximumFractionDigits: 1,
-      }).format(active.end)}`;
-
   return (
-    <div className="curve-progress">
+    <div className={`curve-progress${graduated ? " is-graduated" : ""}`}>
       <div className="curve-progress-head">
         <span>
-          Curve segment {active.index + 1} of {segments.length}
+          Bonding curve
+          {activeSegment >= 0 && ` · segment ${activeSegment + 1} of ${curve.curves.length}`}
         </span>
         <strong>
-          {active.end === null
-            ? "Final segment"
-            : `${percent.toFixed(0)}% to ${target}`}
+          {graduated
+            ? "Graduated"
+            : `${compact.format(raised)} / ${thresholdLabel} raised`}
         </strong>
       </div>
-      <div className="curve-progress-bar" role="img" aria-label={`Curve progress ${percent.toFixed(0)} percent`}>
-        {segments.map((segment) => (
-          <span
-            key={segment.index}
-            className={`curve-progress-segment${
-              segment.index < active.index ? " is-complete" : ""
-            }${segment.index === active.index ? " is-active" : ""}`}
-          >
-            {segment.index === active.index && (
-              <i style={{ width: `${percent}%` }} />
-            )}
-          </span>
-        ))}
+      <div
+        className="curve-progress-bar"
+        role="img"
+        aria-label={graduated
+          ? "Graduated"
+          : `${percent.toFixed(0)} percent to graduation`}
+      >
+        <i style={{ width: `${percent}%` }} />
+      </div>
+      <div className="curve-progress-foot">
+        {graduated
+          ? <span>{thresholdLabel} raised — pool stays locked, trading continues</span>
+          : <span>{percent.toFixed(percent < 10 ? 1 : 0)}% to graduation</span>}
       </div>
     </div>
   );

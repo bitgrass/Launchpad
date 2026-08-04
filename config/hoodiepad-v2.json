@@ -54,8 +54,8 @@
   },
   "market": {
     "mechanism": "doppler-multicurve-v4",
-    "curveVersion": 1,
-    "targetOpeningFdvUsd": "30000",
+    "curveVersion": 2,
+    "targetOpeningFdvUsd": "2500",
     "openingFdvToleranceBps": 250,
     "lpFee": 10000,
     "tickSpacing": 200,

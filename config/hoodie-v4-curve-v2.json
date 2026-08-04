@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "name": "HOODIE_CURVE_V2",
+  "targetOpeningFdvUsd": "2500",
+  "tickSpacing": 200,
+  "curves": [
+    {
+      "marketCap": {
+        "start": 2500,
+        "end": 30000
+      },
+      "numPositions": 6,
+      "shares": "150000000000000000"
+    },
+    {
+      "marketCap": {
+        "start": 30000,
+        "end": 250000
+      },
+      "numPositions": 8,
+      "shares": "250000000000000000"
+    },
+    {
+      "marketCap": {
+        "start": 250000,
+        "end": 5000000
+      },
+      "numPositions": 12,
+      "shares": "350000000000000000"
+    },
+    {
+      "marketCap": {
+        "start": 5000000,
+        "end": "max"
+      },
+      "numPositions": 16,
+      "shares": "250000000000000000"
+    }
+  ]
+}

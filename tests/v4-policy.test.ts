@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getAddress } from "viem";
 import product from "../config/hoodiepad-v2.json";
-import curve from "../config/hoodie-v4-curve-v1.json";
+import curve from "../config/hoodie-v4-curve-v2.json";
 import {
   getV4CalibrationConfigHash,
   isV4CalibrationApproved,
@@ -48,11 +48,12 @@ test("freezes HoodiePad V2 supply, wallet, fee, and curve policy", () => {
   assert.equal(V4_DYNAMIC_FEE_FLAG, 8_388_608);
   assert.equal(product.rehype.startFee, 0);
   assert.equal(product.rehype.endFee, 0);
-  assert.equal(product.market.targetOpeningFdvUsd, "30000");
+  assert.equal(product.market.targetOpeningFdvUsd, "2500");
 
   const reviewedCurve = getHoodieV4Curve();
-  assert.equal(reviewedCurve.length, 3);
-  assert.equal(reviewedCurve[0]?.marketCap.start, 30_000);
+  assert.equal(reviewedCurve.length, 4);
+  assert.equal(reviewedCurve[0]?.marketCap.start, 2_500);
+  assert.equal(reviewedCurve[0]?.marketCap.end, 30_000);
   assert.equal(reviewedCurve.at(-1)?.marketCap.end, "max");
   assert.equal(
     reviewedCurve.reduce((total, item) => total + item.shares, 0n),
@@ -60,7 +61,7 @@ test("freezes HoodiePad V2 supply, wallet, fee, and curve policy", () => {
   );
   assert.deepEqual(
     reviewedCurve.map((item) => item.numPositions),
-    [8, 12, 16],
+    [6, 8, 12, 16],
   );
   assert.equal(curve.tickSpacing, 200);
 });
@@ -141,7 +142,7 @@ test("V2 never accepts a V1 calibration report", () => {
     chainId: 4663,
     forkBlock: "17700000",
     configHash: getV4CalibrationConfigHash(),
-    curveVersion: 1,
+    curveVersion: 2,
     completedAt: "2026-07-24T00:00:00.000Z",
     checks: REQUIRED_V4_CALIBRATION_CHECKS.map((name) => ({
       name,
@@ -150,6 +151,7 @@ test("V2 never accepts a V1 calibration report", () => {
   };
   assert.equal(isV4CalibrationApproved(passed), true);
   assert.equal(isV4CalibrationApproved({ ...passed, version: 1 }), false);
+  assert.equal(isV4CalibrationApproved({ ...passed, curveVersion: 1 }), false);
   assert.equal(
     isV4CalibrationApproved({
       ...passed,

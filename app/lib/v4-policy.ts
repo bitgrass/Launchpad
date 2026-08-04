@@ -9,7 +9,7 @@ import {
 import { computePoolId } from "@whetstone-research/doppler-sdk/evm";
 import type { MulticurveMarketCapRangeCurve } from "@whetstone-research/doppler-sdk/evm";
 import product from "../../config/hoodiepad-v2.json";
-import curve from "../../config/hoodie-v4-curve-v1.json";
+import curve from "../../config/hoodie-v4-curve-v2.json";
 import packageManifest from "../../package.json";
 
 export const WAD = BigInt(product.fees.wad);

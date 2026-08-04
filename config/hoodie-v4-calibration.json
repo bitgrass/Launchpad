@@ -3,10 +3,10 @@
   "marketVersion": "doppler-multicurve-v4-v2",
   "status": "passed",
   "chainId": 4663,
-  "forkBlock": "18519197",
-  "configHash": "0x32fa9ff00851988964470725796bca48a2fd5e725c08995ae4424ab1dd1980c7",
-  "curveVersion": 1,
-  "completedAt": "2026-07-24T22:48:21.756Z",
+  "forkBlock": "27573483",
+  "configHash": "0xec62f36a09fd77f8ca13eb3d9027d88367a5ca1cc5ed3c9666fab6e170f438b9",
+  "curveVersion": 2,
+  "completedAt": "2026-08-04T11:05:41.505Z",
   "checks": [
     {
       "name": "runtime-hashes",
@@ -31,27 +31,27 @@
     {
       "name": "eth-usd-fresh",
       "passed": true,
-      "details": "1858.87 at 2026-07-24T22:47:02.706Z"
+      "details": "1865.87 at 2026-08-04T11:03:32.298Z"
     },
     {
       "name": "hoodie-usd-derived",
       "passed": true,
-      "details": "0.000003519767081292 USD; 528123014.127834195776870356 HOODIE/WETH"
+      "details": "0.000005362423848149 USD; 347952726.758823911301008668 HOODIE/WETH"
     },
     {
       "name": "launch-created",
       "passed": true,
-      "details": "token 0x73e7ab89812d615281b5F97c7F43CCeCEa2be3A8; PoolId 0x67b56cfa6cfb4dd4ea5db8f78bfbda0444eee91c8815ee31c1636176bfd432b3"
+      "details": "token 0x460d6C95BDd7082C8435BB57DcAAE271B90c7c94; PoolId 0xdf1d6831ffbd780d6bb72c25dfb4cb7df9a13b835fb62fa93e0eb301737f30d7"
     },
     {
       "name": "opening-fdv-target",
       "passed": true,
-      "details": "$30000"
+      "details": "$2500"
     },
     {
       "name": "opening-fdv-within-tolerance",
       "passed": true,
-      "details": "$30517.089083"
+      "details": "$2507.920894"
     },
     {
       "name": "total-supply-exact",
@@ -76,7 +76,7 @@
     {
       "name": "no-material-dead-inventory",
       "passed": true,
-      "details": "44"
+      "details": "50"
     },
     {
       "name": "pool-locked",
@@ -96,7 +96,7 @@
     {
       "name": "token-policy",
       "passed": true,
-      "details": "max 20000000000000000000000000; end 1785019621; controller 0x0000000000000000000000000000000000000000"
+      "details": "max 20000000000000000000000000; end 1785927809; controller 0x0000000000000000000000000000000000000000"
     },
     {
       "name": "v4-active-lp-fee-one-percent",
@@ -111,12 +111,12 @@
     {
       "name": "permit2-approval",
       "passed": true,
-      "details": "ERC20 115792089237316195423570985008687907853269984665640564039457584007913129639935; Permit2 1461501637330902918203684832716283019655932542975; expiry 1785538021; balance 852776169033162245918656572"
+      "details": "ERC20 115792089237316195423570985008687907853269984665640564039457584007913129639935; Permit2 1461501637330902918203684832716283019655932542975; expiry 1786446209; balance 55272950501695330586167452"
     },
     {
       "name": "uniswap-v4-router-control",
       "passed": true,
-      "details": "known-live HOODIE/WETH exact-input simulation returned 1868404339473267 WETH"
+      "details": "known-live HOODIE/WETH exact-input simulation returned 2835835121909629 WETH"
     },
     {
       "name": "direct-hoodie-buy",
@@ -151,12 +151,12 @@
     {
       "name": "eth-multihop-buy",
       "passed": true,
-      "details": "39558524871571110513512 child tokens received"
+      "details": "313025692914718818712073 child tokens received"
     },
     {
       "name": "eth-multihop-sell",
       "passed": true,
-      "details": "19779262435785555256756 child tokens sold to ETH"
+      "details": "156512846457359409356036 child tokens sold to ETH"
     },
     {
       "name": "v4-swap-indexing",
@@ -166,27 +166,27 @@
     {
       "name": "creator-pending-fees",
       "passed": true,
-      "details": "collectFees preview 10197792624357855552567/2373368431170432622054630"
+      "details": "collectFees preview 11565128464573594093559/171773225003864495301960"
     },
     {
       "name": "creator-fee-claim",
       "passed": true,
-      "details": "8158234099486284442053/1898694744936346097643704"
+      "details": "9252102771658875274847/137418580003091596241568"
     },
     {
       "name": "ecosystem-fee-claim",
       "passed": true,
-      "details": "1529668893653678332885/356005264675564893308194"
+      "details": "1734769269686039114033/25765983750579674295294"
     },
     {
       "name": "protocol-fee-claim",
       "passed": true,
-      "details": "509889631217892777628/118668421558521631102731"
+      "details": "578256423228679704677/8588661250193224765098"
     },
     {
       "name": "fee-split-80-15-5",
       "passed": true,
-      "details": "token 8158234099486284442053/1529668893653678332885/509889631217892777628; HOODIE 1898694744936346097643704/356005264675564893308194/118668421558521631102731"
+      "details": "token 9252102771658875274847/1734769269686039114033/578256423228679704677; HOODIE 137418580003091596241568/25765983750579674295294/8588661250193224765098"
     },
     {
       "name": "price-orientation-token0",

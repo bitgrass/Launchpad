@@ -1,6 +1,6 @@
 import { keccak256, stringToHex } from "viem";
 import product from "../../config/hoodiepad-v2.json";
-import curve from "../../config/hoodie-v4-curve-v1.json";
+import curve from "../../config/hoodie-v4-curve-v2.json";
 import report from "../../config/hoodie-v4-calibration.json";
 
 export const REQUIRED_V4_CALIBRATION_CHECKS = [
