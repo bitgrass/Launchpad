@@ -5,12 +5,14 @@ import { useEffect, useMemo, useState } from "react";
 import type { HoodiePadMarketSummary } from "../lib/launches";
 import { MarketCard } from "./MarketCard";
 
-type BoardTab = "trending" | "new" | "graduated";
+type BoardTab = "trending" | "top" | "new" | "curve" | "graduated";
 
-const TABS: Array<{ id: BoardTab; label: string; icon: string }> = [
-  { id: "trending", label: "Trending", icon: "🔥" },
-  { id: "new", label: "New", icon: "🌱" },
-  { id: "graduated", label: "Graduated", icon: "🎓" },
+const TABS: Array<{ id: BoardTab; label: string; icon: string; hint: string }> = [
+  { id: "trending", label: "Trending", icon: "🔥", hint: "Most 24h volume" },
+  { id: "top", label: "Top", icon: "🏆", hint: "Largest market cap" },
+  { id: "new", label: "New", icon: "🌱", hint: "Newest launches" },
+  { id: "curve", label: "Curve", icon: "📈", hint: "Closest to graduation" },
+  { id: "graduated", label: "Graduated", icon: "🎓", hint: "Cleared 420M HOODIE" },
 ];
 
 const BOARD_SIZE = 12;
@@ -90,6 +92,19 @@ export function HomeBoard({
         .sort((first, second) => second.launchTimestamp - first.launchTimestamp)
         .slice(0, BOARD_SIZE);
     }
+    if (tab === "curve") {
+      // Still filling the curve, closest to graduating first — the board a
+      // trader actually scans for what is about to break out.
+      return markets
+        .filter((market) => {
+          const percent = market.graduationPercent;
+          return percent !== null && percent < 100;
+        })
+        .sort((first, second) =>
+          (second.graduationPercent ?? 0) - (first.graduationPercent ?? 0) ||
+          second.volume24hHoodieNumber - first.volume24hHoodieNumber)
+        .slice(0, BOARD_SIZE);
+    }
     const ranked = [...markets];
     if (tab === "trending") {
       ranked.sort((first, second) => {
@@ -102,11 +117,17 @@ export function HomeBoard({
         if (firstVolume !== secondVolume) return secondVolume - firstVolume;
         return second.launchTimestamp - first.launchTimestamp;
       });
+    } else if (tab === "top") {
+      ranked.sort((first, second) =>
+        (second.fdvHoodieNumber ?? 0) - (first.fdvHoodieNumber ?? 0) ||
+        second.volumeHoodieNumber - first.volumeHoodieNumber);
     } else {
       ranked.sort((first, second) => second.launchTimestamp - first.launchTimestamp);
     }
     return ranked.slice(0, BOARD_SIZE);
   }, [markets, tab]);
+
+  const activeTab = TABS.find((entry) => entry.id === tab);
 
   return (
     <section className="market-section section-frame home-board">
@@ -114,6 +135,7 @@ export function HomeBoard({
         <div>
           <p className="eyebrow"><span /> Live from the trenches</p>
           <h2>The board.</h2>
+          {activeTab && <small className="board-hint">{activeTab.hint}</small>}
         </div>
         <div className="explore-tabs board-tabs" role="tablist" aria-label="Launch board">
           {TABS.map((entry) => (
@@ -162,6 +184,11 @@ export function HomeBoard({
             The first market to accumulate 420M HOODIE in its locked pool
             graduates — the pool stays locked and trading continues.
           </p>
+        </div>
+      ) : tab === "curve" ? (
+        <div className="live-empty-state">
+          <strong>No markets on the curve right now.</strong>
+          <p>Every validated launch appears here while it fills toward graduation.</p>
         </div>
       ) : (
         <div className="live-empty-state">
