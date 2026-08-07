@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { formatUnits } from "viem";
+import product from "../config/hoodiepad-v2.json";
 import { AppShell } from "./components/AppShell";
 import { HomeBoard } from "./components/HomeBoard";
+import { estimatedBeneficiaryFee } from "./lib/analytics";
 import { readDisplayPrices } from "./lib/display-prices";
 import {
   readHoodiePadLaunches,
@@ -11,10 +14,19 @@ export const revalidate = 0;
 
 function usdCompact(value: number | null) {
   if (value === null || !Number.isFinite(value)) return null;
+  if (value === 0) return "$0";
+  if (value < 0.01) return "<$0.01";
   return `$${new Intl.NumberFormat("en-US", {
     notation: value >= 10_000 ? "compact" : "standard",
     maximumFractionDigits: 2,
   }).format(value)}`;
+}
+
+function hoodieCompact(value: number) {
+  return `${new Intl.NumberFormat("en-US", {
+    notation: value >= 1_000_000 ? "compact" : "standard",
+    maximumFractionDigits: value >= 1_000 ? 0 : 2,
+  }).format(value)} HOODIE`;
 }
 
 export default async function Home() {
@@ -33,12 +45,22 @@ export default async function Home() {
     0,
   );
   const totalTrades = markets.reduce((sum, market) => sum + market.txns, 0);
-  const totalVolumeUsd = prices.hoodieUsd !== null
-    ? usdCompact(totalVolumeHoodie * prices.hoodieUsd)
-    : null;
-  const volume24hUsd = prices.hoodieUsd !== null
-    ? usdCompact(volume24hHoodie * prices.hoodieUsd)
-    : null;
+  const trades24h = markets.reduce((sum, market) => sum + market.txns24h, 0);
+  const devs = new Set(markets.map((market) => market.creator.toLowerCase())).size;
+  // Same fee estimator the analytics and fuel pages use: HOODIE-side
+  // fee-bearing volume at the immutable 80% creator share.
+  const feeVolumeRaw = launches.reduce(
+    (total, launch) => total + BigInt(launch.analytics.hoodieFeeVolumeRaw),
+    0n,
+  );
+  const creatorFeesHoodie = Number(
+    formatUnits(estimatedBeneficiaryFee(feeVolumeRaw, product.fees.creator), 18),
+  );
+  const usdFor = (hoodie: number) =>
+    prices.hoodieUsd !== null ? usdCompact(hoodie * prices.hoodieUsd) : null;
+  const creatorFeesUsd = usdFor(creatorFeesHoodie);
+  const totalVolumeUsd = usdFor(totalVolumeHoodie);
+  const volume24hUsd = usdFor(volume24hHoodie);
 
   return (
     <AppShell>
@@ -75,20 +97,41 @@ export default async function Home() {
       <section className="home-stats" aria-label="Live protocol stats and launch rules">
         <div className="home-stats-live">
           <div>
+            <strong>{creatorFeesUsd ?? hoodieCompact(creatorFeesHoodie)}</strong>
+            <span>Creator earnings</span>
+            <small>
+              {creatorFeesUsd
+                ? hoodieCompact(creatorFeesHoodie)
+                : "80% of every pool fee"}
+            </small>
+          </div>
+          <div>
+            <strong>{totalVolumeUsd ?? hoodieCompact(totalVolumeHoodie)}</strong>
+            <span>Total volume</span>
+            <small>
+              {totalVolumeUsd
+                ? hoodieCompact(totalVolumeHoodie)
+                : "all canonical pools"}
+            </small>
+          </div>
+          <div>
+            <strong>{volume24hUsd ?? hoodieCompact(volume24hHoodie)}</strong>
+            <span>24h volume</span>
+            <small>
+              {volume24hUsd
+                ? hoodieCompact(volume24hHoodie)
+                : "rolling window"}
+            </small>
+          </div>
+          <div>
             <strong>{markets.length.toLocaleString("en-US")}</strong>
             <span>Tokens launched</span>
-          </div>
-          <div>
-            <strong>{totalVolumeUsd ?? `${Math.round(totalVolumeHoodie).toLocaleString("en-US")} HOODIE`}</strong>
-            <span>Total volume</span>
-          </div>
-          <div>
-            <strong>{volume24hUsd ?? `${Math.round(volume24hHoodie).toLocaleString("en-US")} HOODIE`}</strong>
-            <span>24h volume</span>
+            <small>{devs.toLocaleString("en-US")} {devs === 1 ? "dev" : "devs"}</small>
           </div>
           <div>
             <strong>{totalTrades.toLocaleString("en-US")}</strong>
             <span>Trades</span>
+            <small>{trades24h.toLocaleString("en-US")} in the last 24h</small>
           </div>
         </div>
         <div className="home-stats-rules">

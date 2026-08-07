@@ -53,7 +53,7 @@ function formatTokenAmount(raw: bigint) {
   }).format(value);
 }
 
-function estimatedBeneficiaryFee(feeBearingVolume: bigint, shares: string) {
+export function estimatedBeneficiaryFee(feeBearingVolume: bigint, shares: string) {
   return feeBearingVolume
     * BigInt(product.market.lpFee)
     * BigInt(shares)
